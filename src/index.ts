@@ -359,12 +359,58 @@ export type {
 } from './policy/executor';
 
 /**
+ * Record / replay transports.
+ *
+ * Capture real model turns and replay them in tests without network access —
+ * replay determinism is END-TO-END: the stored value is the RAW
+ * {@link LlmResponse}, so the whole harness pipeline (normalization →
+ * envelope validation → policy) reruns identically on replay. Requests are
+ * keyed by a stable sha256 of their canonical JSON (recursively sorted keys),
+ * so key insertion order never changes the hash.
+ *
+ * - `canonicalJsonStringify(value)` — canonical JSON with recursively sorted
+ *   object keys; non-JSON-safe input → typed failure, never a throw.
+ * - `inputHashOf(request)` — stable sha256 hex of the canonical request
+ *   (async: Web Crypto `crypto.subtle` — works in Node 20+ and browsers).
+ * - `RecordingTransport` — decorator over a real transport; records each
+ *   successful `{request, response}` pair; rejections pass through
+ *   unreplayed. No file I/O — the host persists via `onRecord`.
+ * - `ReplayTransport` — returns the stored raw response for a known request;
+ *   miss → `'strict'` (default) rejects with `ReplayMissError` carrying the
+ *   hash, `'passthrough'` forwards to an optional inner transport.
+ * - `serializeRecording` / `parseRecording` — versioned recording-file
+ *   schema; old/wrong `recordingVersion` and unknown keys are hard typed
+ *   failures (no silent migration). Atomic write (tmp + rename) is the
+ *   host's job — documented in JSDoc, implemented nowhere in the library.
+ */
+export {
+  DEFAULT_REPLAY_RECORDING_VERSION,
+  canonicalJsonStringify,
+  inputHashOf
+} from './record/hash';
+export type { HashFailure, JsonSafeFailure } from './record/hash';
+export {
+  RecordingTransport,
+  ReplayTransport,
+  parseRecording,
+  serializeRecording
+} from './record/recordReplay';
+export type {
+  OnRecordCallback,
+  RecordingEntries,
+  RecordingFile,
+  RecordingParseFailure,
+  RecordingSerializeResult,
+  ReplayMissError,
+  ReplayMissOptions
+} from './record/recordReplay';
+
+/**
  * Planned exports — NOT YET AVAILABLE. Do not import; these subpaths and
  * symbols are scheduled for later work packages and are listed here to make
  * the roadmap visible from the front door.
  *
- * - Record/replay transports — capture real model turns and replay them in
- *   tests without network access.
- * - Gemini transport — a concrete provider adapter, published behind the
- *   `./gemini` subpath so the core package stays vendor-free.
+ * - Worked examples (pig-latin, doctor-scheduling, guess-number) — runnable
+ *   demonstrations doubling as the live-Gemini CI suite, published under
+ *   `examples/`.
  */
