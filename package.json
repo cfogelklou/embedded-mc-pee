@@ -1,0 +1,60 @@
+{
+  "name": "embedded-mc-pee",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP-shaped harness for embedding tool-calling LLM intelligence into backends — typed envelopes, deterministic validation, record/replay",
+  "license": "MIT",
+  "author": "Chris Fogelklou",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cfogelklou/embedded-mc-pee"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./gemini": {
+      "types": "./dist/gemini/index.d.ts",
+      "import": "./dist/gemini/index.js",
+      "require": "./dist/gemini/index.cjs"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE",
+    "docs"
+  ],
+  "peerDependencies": {
+    "@google/genai": ">=2.8"
+  },
+  "peerDependenciesMeta": {
+    "@google/genai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "~5.7",
+    "tsup": "^8.3.5",
+    "vitest": "^3",
+    "eslint": "^9",
+    "typescript-eslint": "^8",
+    "@types/node": "^22",
+    "@google/genai": "^2.8"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:examples": "vitest run --config examples/vitest.config.ts",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
+  }
+}

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  pack-and-install:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Create temp consumer
+        run: |
+          CONSUMER_DIR=$(mktemp -d)
+          cd "$CONSUMER_DIR"
+          npm init -y
+          npm install "$GITHUB_WORKSPACE"/*.tgz
+          node --input=- <<'EOF'
+          (async () => {
+            const pkg = await import('embedded-mc-pee');
+            console.log('✓ embedded-mc-pee resolved successfully');
+            console.log('  Version:', pkg.LIBRARY_VERSION);
+          })().catch(err => {
+            console.error('✗ Failed to resolve embedded-mc-pee:', err);
+            process.exit(1);
+          });
+          EOF
+
+      # TODO: Git-dependency install test (requires pushed history)
+      # Deferred until repository is public and has commits

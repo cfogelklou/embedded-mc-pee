@@ -1,0 +1,44 @@
+name: live-gemini
+
+on:
+  push:
+    branches: [main, init/library]
+  workflow_dispatch:
+
+jobs:
+  test:
+    if: github.repository == 'cfogelklou/embedded-mc-pee'
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      # NOTE: Examples land in a later work package (WP-X).
+      # The workflow will fail-fast gracefully until then:
+      # - This guard step exits 0 with a notice if examples/ does not exist
+      # - The workflow remains green before WP-X lands
+      # Once examples exist, remove the guard and continue-on-error becomes false
+      - name: Guard - examples not yet implemented
+        id: examples-guard
+        run: |
+          if [ ! -d "examples" ]; then
+            echo "✓ examples/ not yet implemented (WP-X) — workflow passes preemptively"
+            echo "examples_exist=false" >> $GITHUB_OUTPUT
+          else
+            echo "✓ examples/ exists — running live tests"
+            echo "examples_exist=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Test examples (if available)
+        if: steps.examples-guard.outputs.examples_exist == 'true'
+        continue-on-error: false
+        run: npm run test:examples

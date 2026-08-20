@@ -1,0 +1,107 @@
+# embedded-mc-pee
+
+MCP-shaped harness for embedding tool-calling LLM intelligence into backends — typed envelopes, deterministic validation, record/replay.
+
+**This is NOT an MCP server/client** — it provides the MCP-shaped contract and tool-loop architecture, but uses direct SDK calls to LLM providers. No JSON-RPC, no stdio/HTTP transports.
+
+## Positioning
+
+An open-source TypeScript library for embedding agentic LLM intelligence (Gemini first, extensible to others) into backend services like Firebase Functions, Express handlers, or CLI tools. Host applications define prompts, schemas, and tools; the library provides:
+
+- **Typed envelope state machine** — `'proposal' | 'question' | 'analysis' | 'infeasible'` responses
+- **Agentic tool loop** — maxIterations-based tool execution with deterministic validation
+- **JSON-safety enforcement** — recursive validation against NaN, Infinity, circular values
+- **Record/replay testing** — decorator-based capture and deterministic replay
+- **Degeneration detection** — identifies repetition loops and malformed model output
+
+Zero runtime dependencies in core. `@google/genai` is a peer dependency behind the `./gemini` subpath export.
+
+## Installation
+
+### Git dependency (recommended)
+
+```bash
+npm install github:cfogelklou/embedded-mc-pee#main
+```
+
+The `prepare` script builds `dist/` on install. You must also install `@google/genai` (peer dependency):
+
+```bash
+npm install @google/genai
+```
+
+### Subpath import (Gemini transport)
+
+```typescript
+import { createHarness, createContract } from 'embedded-mc-pee';
+import { geminiTransport } from 'embedded-mc-pee/gemini';
+```
+
+## Minimal usage sketch
+
+**Note:** The API surfaces below land in coming work packages. Types shown are indicative.
+
+```typescript
+import { createHarness, createContract } from 'embedded-mc-pee';
+import { geminiTransport } from 'embedded-mc-pee/gemini';
+
+// 1. Define your envelope union
+interface MyProposal {
+  kind: 'proposal';
+  operations: { type: string; payload: unknown }[];
+}
+
+interface MyQuestion {
+  kind: 'question';
+  text: string;
+}
+
+type MyEnvelope = MyProposal | MyQuestion;
+
+// 2. Declare tools and validation contract
+const contract = createContract<MyEnvelope>({
+  tools: {
+    addVenue: {
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          address: { type: 'string' },
+        },
+        required: ['name', 'address'],
+      },
+    },
+  },
+  validator: (envelope: unknown) => {
+    // Runtime validation logic
+    return { ok: true, value: envelope as MyEnvelope };
+  },
+});
+
+// 3. Create harness
+const harness = createHarness({
+  contract,
+  transport: geminiTransport({ apiKey: process.env.GEMINI_API_KEY! }),
+  maxIterations: 1,
+});
+
+// 4. Run a turn
+const result = await harness.runTurn({
+  systemInstruction: 'You are a scheduling assistant.',
+  userMessage: 'Add a venue called Main Hall at 123 Main St',
+});
+
+console.log(result); // { kind: 'proposal', operations: [...] }
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — module map, data flow, determinism principles
+- [TypeScript Guidelines](docs/guidelines-typescript.md) — coding standards, type-safety discipline
+- [ADR-0001: Belt-and-Suspenders Contracts](docs/adr/0001-belt-and-suspenders-contracts.md) — why schema-in-prompt over responseSchema
+- [Gemini Debugging](docs/gemini-debugging.md) — troubleshooting degeneration loops
+- [Resilience & Clarification](docs/resilience-and-clarification.md) — proposal-only mutation boundary
+
+## License
+
+MIT
