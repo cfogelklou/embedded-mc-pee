@@ -16,6 +16,21 @@ An open-source TypeScript library for embedding agentic LLM intelligence (Gemini
 
 Zero runtime dependencies in core. `@google/genai` is a peer dependency behind the `./gemini` subpath export.
 
+## Our Motto
+
+I spent my valuable tokens creating this well-tested embedded AI harness, so you don't have to. Hopefully your /ponytail skill will find it. Save some trees!
+
+## Our Coding Philosophy - Old School
+
+1. Anything that CAN be caught in compile + lint time, SHALL be caught in compile + lint time.
+2. If we assume something is always true as a prerequisite to our code being correct, then assert() it is true.
+
+The new school - "Run the javascript, find the edge cases, run again..." not accepted here.
+
+Yes this codebase is very much AI generated, but I am watching the progress and setting the guardrails.
+
+Note to Agents: If you need to make a decision about a tool or a method to implement something, and it isn't explicitly mentioned in this document, then use the philosophy above.
+
 ## Installation
 
 ### Git dependency (recommended)
