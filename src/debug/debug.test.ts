@@ -3,8 +3,19 @@
  *
  * Ported from courtpuzzle/src/common/__tests__/debug.test.ts
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { assert, dbg, isDebug, setDebug, AssertionError } from './debug';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  assert,
+  dbg,
+  isDebug,
+  setDebug,
+  AssertionError,
+  DEFAULT_DEBUG_SINK,
+  getDebugSink,
+  setDebugSink,
+  type DebugLevel,
+  type DebugSink
+} from './debug';
 
 describe('debug', () => {
   beforeEach(() => {
@@ -162,6 +173,124 @@ describe('debug', () => {
 
       spyLog.mockRestore();
       setDebug(false);
+    });
+  });
+
+  describe('debug sink', () => {
+    interface RecordedCall {
+      level: DebugLevel;
+      message: string;
+    }
+
+    function makeRecordingSink(): { sink: DebugSink; calls: RecordedCall[] } {
+      const calls: RecordedCall[] = [];
+      const sink: DebugSink = (level, message) => {
+        calls.push({ level, message });
+      };
+      return { sink, calls };
+    }
+
+    afterEach(() => {
+      setDebugSink(null);
+      setDebug(false);
+    });
+
+    it('routes log/warn/error to the installed sink with correct level and message', () => {
+      const { sink, calls } = makeRecordingSink();
+      setDebugSink(sink);
+      setDebug(true);
+
+      dbg.log('Info message');
+      dbg.warn('Warning message');
+      dbg.error('Error message');
+
+      expect(calls.map((c) => c.level)).toEqual(['log', 'warn', 'error']);
+      expect(calls[0].message).toContain('Info message');
+      expect(calls[1].message).toContain('Warning message');
+      expect(calls[2].message).toContain('Error message');
+      // Every message is prefixed with the timestamp
+      for (const call of calls) {
+        expect(call.message).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]/);
+      }
+    });
+
+    it('does not call the sink when debug is disabled (zero overhead)', () => {
+      const { sink, calls } = makeRecordingSink();
+      setDebugSink(sink);
+      setDebug(false);
+
+      dbg.log('Suppressed');
+      dbg.warn('Suppressed');
+      dbg.error('Suppressed');
+      dbg.logObj('Suppressed', { a: 1 });
+      dbg.log(() => {
+        throw new Error('lazy message must not be evaluated when disabled');
+      });
+
+      expect(calls).toHaveLength(0);
+    });
+
+    it('renders objects for logObj and emits at level log', () => {
+      const { sink, calls } = makeRecordingSink();
+      setDebugSink(sink);
+      setDebug(true);
+
+      dbg.logObj('Label', { a: 1 });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].level).toBe('log');
+      expect(calls[0].message).toContain('Label');
+      expect(calls[0].message).toContain('"a": 1');
+    });
+
+    it('handles circular references in logObj via the sink without throwing', () => {
+      const { sink, calls } = makeRecordingSink();
+      setDebugSink(sink);
+      setDebug(true);
+
+      const circular: Record<string, unknown> = { name: 'circular' };
+      circular.self = circular;
+
+      expect(() => dbg.logObj('Circular', circular)).not.toThrow();
+      expect(calls).toHaveLength(1);
+      expect(calls[0].level).toBe('log');
+      expect(calls[0].message).toContain('Circular');
+    });
+
+    it('restores the console-backed default sink on setDebugSink(null)', () => {
+      const { sink, calls } = makeRecordingSink();
+      setDebugSink(sink);
+      expect(getDebugSink()).toBe(sink);
+
+      const spyLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        setDebugSink(null);
+        expect(getDebugSink()).toBe(DEFAULT_DEBUG_SINK);
+
+        setDebug(true);
+        dbg.log('Via console');
+        expect(calls).toHaveLength(0);
+        expect(spyLog).toHaveBeenCalledTimes(1);
+        expect(String(spyLog.mock.calls[0][0])).toContain('Via console');
+      } finally {
+        spyLog.mockRestore();
+      }
+    });
+
+    it('throws AssertionError for a non-function sink argument', () => {
+      expect(() => setDebugSink(42 as unknown as DebugSink)).toThrow(AssertionError);
+      expect(() => setDebugSink('nope' as unknown as DebugSink)).toThrowError(
+        /\[AssertionError\] setDebugSink expects a sink function or null/
+      );
+      // The previously installed sink is left untouched
+      expect(getDebugSink()).toBe(DEFAULT_DEBUG_SINK);
+    });
+
+    it('getDebugSink returns the installed sink', () => {
+      expect(getDebugSink()).toBe(DEFAULT_DEBUG_SINK);
+      const { sink } = makeRecordingSink();
+      setDebugSink(sink);
+      expect(getDebugSink()).toBe(sink);
     });
   });
 });

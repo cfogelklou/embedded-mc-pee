@@ -82,6 +82,72 @@ export function isDebug(): boolean {
 }
 
 /**
+ * Severity level of a debug emit. Maps 1:1 to the `dbg` method that
+ * produced it: `log` → 'log', `warn` → 'warn', `error` → 'error'
+ * (`logObj` emits at 'log').
+ */
+export type DebugLevel = 'log' | 'warn' | 'error';
+
+/**
+ * Caller-installable output sink for debug output.
+ *
+ * Every `dbg.*` emit (when debug is enabled) is routed to the installed
+ * sink with a severity level and a fully rendered, single-line message
+ * (timestamp included). Hosts that provide their own logging library
+ * (e.g. `logger` from `firebase-functions`) install a sink once at
+ * startup to route library debug output there instead of raw console.
+ */
+export type DebugSink = (level: DebugLevel, message: string) => void;
+
+/**
+ * Default console-backed sink. Delegates each level to the matching
+ * `console` method. Exported so hosts can build chaining/wrapping sinks
+ * that fall back to the default behavior.
+ */
+export const DEFAULT_DEBUG_SINK: DebugSink = (level: DebugLevel, message: string): void => {
+  // eslint-disable-next-line no-console
+  console[level](message);
+};
+
+/**
+ * Installed sink. Module-level state: sink installation is global for the
+ * process (one library instance per bundle); hosts should install once at
+ * startup, not per call site.
+ */
+let _sink: DebugSink = DEFAULT_DEBUG_SINK;
+
+/**
+ * Installs a caller-provided debug output sink, replacing the default
+ * console-backed sink. Pass `null` to restore the default.
+ *
+ * This is host wiring, not untrusted input: a non-function argument is a
+ * programmer error and always throws (regardless of debug mode — the
+ * built-in `assert` only throws when debug is enabled, which is not a
+ * strong enough guarantee for a broken host bootstrap).
+ *
+ * @param sink - Sink function to install, or `null` to restore
+ *   {@link DEFAULT_DEBUG_SINK}.
+ * @throws AssertionError if `sink` is neither a function nor `null`.
+ */
+export function setDebugSink(sink: DebugSink | null): void {
+  if (typeof sink !== 'function' && sink !== null) {
+    throw new AssertionError(
+      `setDebugSink expects a sink function or null, received ${typeof sink}`
+    );
+  }
+  _sink = sink === null ? DEFAULT_DEBUG_SINK : sink;
+}
+
+/**
+ * Returns the currently installed debug sink (the default console-backed
+ * sink when none has been installed). Useful for tests and for hosts that
+ * wrap or chain sinks.
+ */
+export function getDebugSink(): DebugSink {
+  return _sink;
+}
+
+/**
  * Dynamically toggles debug logging at runtime.
  */
 export function setDebug(enabled: boolean): void {
@@ -143,59 +209,74 @@ function resolveMessage(message: unknown): unknown {
 }
 
 /**
+ * Renders a single value for sink output. Strings pass through verbatim;
+ * other values are JSON-serialized with a `String()` fallback for values
+ * JSON cannot represent (circular refs, undefined, functions).
+ */
+function renderValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    const json: string | undefined = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Renders one debug line: timestamp followed by space-separated parts.
+ */
+function formatLine(ts: string, parts: readonly unknown[]): string {
+  const rendered: string[] = [];
+  for (const part of parts) {
+    rendered.push(renderValue(part));
+  }
+  return `${ts} ${rendered.join(' ')}`;
+}
+
+/**
  * Structured debug logger.
  *
- * Produces zero console output and skips internal string formatting unless debug mode is active.
+ * Produces zero output and skips internal string formatting unless debug
+ * mode is active. Every emit goes through the installed
+ * {@link DebugSink} (default: console) with the matching severity level.
  */
 export const dbg: Readonly<DebugLogger> = {
   log(message?: unknown, ...optionalParams: unknown[]): void {
     if (_isDebug) {
-      const ts = getTimestamp();
       const resolved = resolveMessage(message);
-      if (optionalParams.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log(ts, resolved, ...optionalParams);
-      } else {
-        // eslint-disable-next-line no-console
-        console.log(ts, resolved);
-      }
+      _sink('log', formatLine(getTimestamp(), [resolved, ...optionalParams]));
     }
   },
 
   warn(message?: unknown, ...optionalParams: unknown[]): void {
     if (_isDebug) {
-      const ts = getTimestamp();
       const resolved = resolveMessage(message);
-      if (optionalParams.length > 0) {
-        console.warn(ts, resolved, ...optionalParams);
-      } else {
-        console.warn(ts, resolved);
-      }
+      _sink('warn', formatLine(getTimestamp(), [resolved, ...optionalParams]));
     }
   },
 
   error(message?: unknown, ...optionalParams: unknown[]): void {
     if (_isDebug) {
-      const ts = getTimestamp();
       const resolved = resolveMessage(message);
-      if (optionalParams.length > 0) {
-        console.error(ts, resolved, ...optionalParams);
-      } else {
-        console.error(ts, resolved);
-      }
+      _sink('error', formatLine(getTimestamp(), [resolved, ...optionalParams]));
     }
   },
 
   logObj(label: string, obj: unknown): void {
     if (_isDebug) {
       const ts = getTimestamp();
+      let rendered: string;
       try {
-        // eslint-disable-next-line no-console
-        console.log(ts, label, JSON.stringify(obj, null, 2));
+        const json: string | undefined = JSON.stringify(obj, null, 2);
+        rendered = json === undefined ? String(obj) : json;
       } catch {
-        // eslint-disable-next-line no-console
-        console.log(ts, label, obj);
+        // Documented best-effort fallback: circular or non-serializable objects
+        rendered = String(obj);
       }
+      _sink('log', `${ts} ${label} ${rendered}`);
     }
   }
 };
