@@ -171,12 +171,52 @@ export { AssertionError, assert, dbg, isDebug, setDebug } from './debug/debug';
 export type { DebugLogger } from './debug/debug';
 
 /**
+ * Tool contract (MCP-shaped, spec revision 2025-06-18).
+ *
+ * Declarative description of a tool the agent may call — the MCP `Tool` /
+ * `CallToolResult` data contracts without the MCP wire protocol. Use this
+ * group to register in-process tools with the harness: the contract is
+ * rendered into the model request, arguments are validated against
+ * `inputSchema` BEFORE the handler runs, and results come back as typed
+ * `ToolResult`s (`isError` is in-band feedback, never an exception).
+ *
+ * - `ToolContract<I, R>` — MCP `Tool`: name/title/description/inputSchema/
+ *   outputSchema/annotations (advisory, never enforced).
+ * - `ToolResult<R>` — MCP `CallToolResult`, with the `content[]` array
+ *   flattened to a single `text` channel.
+ * - `ToolHandler<I, R>` — in-process handler; a throw is caught by the
+ *   harness and converted to an in-band `isError` result.
+ * - `validateToolArgs(tool, args)` — the pure pre-execution check (MCP
+ *   "args-validate-before-execute" duty); pragmatic JSON-Schema subset,
+ *   unknown keywords ignored.
+ * - `JsonSchema` / `JsonSchemaObject` — minimal structural JSON Schema types
+ *   shared with the contract manifest.
+ *
+ * Field-by-field MCP mapping: `docs/mcp-contract-mapping.md`.
+ */
+export {
+  JsonSchemaTypeName,
+  validateToolArgs
+} from './tool/toolContract';
+export type {
+  JsonSchema,
+  JsonSchemaObject,
+  ToolAnnotations,
+  ToolArgsValidation,
+  ToolArgsViolation,
+  ToolContract,
+  ToolHandler,
+  ToolResult
+} from './tool/toolContract';
+
+/**
  * Planned exports — NOT YET AVAILABLE. Do not import; these subpaths and
  * symbols are scheduled for later work packages and are listed here to make
  * the roadmap visible from the front door.
  *
- * - Tool contract + contract manifest — declarative description of the tools
- *   the agent may call, rendered into the prompt MCP-style.
+ * - Contract manifest — envelope + payload schemas + tool declarations as one
+ *   declarative SSOT, deriving both the tool schema and the prompt-rendered
+ *   contract (belt and suspenders).
  * - `AgentHarness` executor — the tool-calling loop that drives a transport,
  *   validates each turn against the envelope, and returns the final
  *   `AgentTurn`.
