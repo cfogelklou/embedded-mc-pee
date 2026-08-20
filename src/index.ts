@@ -159,6 +159,11 @@ export { isTransientProviderError } from './policy/transientErrors';
  *
  * - `dbg` — structured logger (`log`/`warn`/`error`/`logObj`); produces no
  *   output and skips formatting unless debug mode is active.
+ * - `setDebugSink(sink | null)` / `getDebugSink()` — install a
+ *   caller-provided output sink so library debug output routes to the host's
+ *   logging library (e.g. Firebase Functions `logger`) instead of raw
+ *   console; `null` restores `DEFAULT_DEBUG_SINK`. Process-global; install
+ *   once at host startup. Zero overhead when debug is disabled.
  * - `isDebug()` / `setDebug(enabled)` — read/toggle debug mode; initially
  *   on when `DEBUG=true/1` env var, browser `localStorage.DEBUG`, or
  *   development/test `NODE_ENV`.
@@ -167,8 +172,17 @@ export { isTransientProviderError } from './policy/transientErrors';
  *   external input (LLM output, API payloads) use the envelope validators
  *   above instead.
  */
-export { AssertionError, assert, dbg, isDebug, setDebug } from './debug/debug';
-export type { DebugLogger } from './debug/debug';
+export {
+  AssertionError,
+  assert,
+  dbg,
+  isDebug,
+  setDebug,
+  DEFAULT_DEBUG_SINK,
+  getDebugSink,
+  setDebugSink
+} from './debug/debug';
+export type { DebugLevel, DebugLogger, DebugSink } from './debug/debug';
 
 /**
  * Tool contract (MCP-shaped, spec revision 2025-06-18).
@@ -210,13 +224,63 @@ export type {
 } from './tool/toolContract';
 
 /**
+ * Contract manifest — one declarative SSOT, two derived artifacts.
+ *
+ * Per ADR-0001 (belt and suspenders), the tool schema AND the prompt-rendered
+ * contract text are both DERIVED from a single {@link ContractManifest}, so
+ * they can never drift — and no giant `responseSchema` is ever sent to the
+ * model; the prompt text carries the contract. Use this group to declare your
+ * domain payload schema once and hand the resulting {@link Contract} to the
+ * harness.
+ *
+ * - `ContractManifest` / `EnvelopeFieldSpec` / `EnvelopeConditionalField` —
+ *   the declarative manifest (envelope state list + conditional field rules +
+ *   host payload JSON Schema + optional metadata).
+ * - `createContract(manifest, validateHostPayload, options?)` — validates the
+ *   manifest (typed failure list, never throws), canonicalizes it (sorted keys
+ *   → byte-stable derived artifacts regardless of host key insertion order),
+ *   and returns a `Contract` with both derived artifacts plus the wrapped
+ *   payload validator (unknown top-level payload keys rejected by default,
+ *   `'ignore'` policy available).
+ * - `Contract<P>` — the validated, self-contained contract object.
+ * - `deriveToolSchema` / `renderPromptContract` / `canonicalizeManifest` — the
+ *   pure derivation functions, exported for hosts hashing or diffing manifests.
+ * - `lintContract(contract | manifest, thresholds?)` — payload schema
+ *   complexity gate (properties/depth/leaves, warn + error tiers) for host CI;
+ *   thresholds caller-configurable via `LintThresholds`.
+ */
+export { KNOWN_ENVELOPE_CONDITIONAL_FIELDS } from './contract/manifest';
+export type {
+  EnvelopeConditionalField,
+  EnvelopeFieldSpec,
+  ContractManifest
+} from './contract/manifest';
+export { canonicalizeManifest, deriveToolSchema, renderPromptContract } from './contract/derive';
+export type { CanonicalManifest, CanonicalEnvelopeFieldSpec } from './contract/derive';
+export { createContract } from './contract/contract';
+export type {
+  Contract,
+  CreateContractOptions,
+  CreateContractResult,
+  ManifestFailure,
+  ManifestFailureCode
+} from './contract/contract';
+export {
+  DEFAULT_WARN_MAX_PROPERTIES,
+  DEFAULT_ERROR_MAX_PROPERTIES,
+  DEFAULT_WARN_MAX_DEPTH,
+  DEFAULT_ERROR_MAX_DEPTH,
+  DEFAULT_WARN_MAX_LEAVES,
+  DEFAULT_ERROR_MAX_LEAVES,
+  lintContract
+} from './contract/lint';
+export type { ContractLintFinding, LintThresholds } from './contract/lint';
+
+/**
  * Planned exports — NOT YET AVAILABLE. Do not import; these subpaths and
  * symbols are scheduled for later work packages and are listed here to make
  * the roadmap visible from the front door.
  *
- * - Contract manifest — envelope + payload schemas + tool declarations as one
- *   declarative SSOT, deriving both the tool schema and the prompt-rendered
- *   contract (belt and suspenders).
  * - `AgentHarness` executor — the tool-calling loop that drives a transport,
  *   validates each turn against the envelope, and returns the final
  *   `AgentTurn`.
