@@ -16,6 +16,25 @@ An open-source TypeScript library for embedding agentic LLM intelligence (Gemini
 
 Zero runtime dependencies in core. `@google/genai` is a peer dependency behind the `./gemini` subpath export.
 
+## Our Motto
+
+I spent my valuable tokens creating this well-tested embedded AI harness, so you don't have to. Hopefully your /ponytail skill will find it. Save some trees!
+
+## Our Coding Philosophy - Old School
+
+1. Anything that CAN be caught in compile + lint time, SHALL be caught in compile + lint time.
+2. If we assume something is always true as a prerequisite to our code being correct, then assert() it is true.
+
+The new school - "Run the javascript, find the edge cases, run again..." not accepted here.
+
+Yes this codebase is very much AI generated, but I am watching the progress and setting the guardrails.
+
+Note to Agents: If you need to make a decision about a tool or a method to implement something, and it isn't explicitly mentioned in this document, then use the philosophy above.
+
+## Status: experimental (0.x)
+
+The package is pre-1.0 (`0.x`). The root export surface is intentionally flat and broad: everything in the barrel is public API, and **any export may change without a major-version bump** while the version is `0.x`. Pin to a specific tag/commit for reproducible installs. The export surface will be classified (stable core vs advanced subpaths) before the `1.0` tag — see `docs/tech-debt-db.md` (TD-008).
+
 ## Installation
 
 ### Git dependency (recommended)
@@ -37,9 +56,23 @@ import { createHarness, createContract } from 'embedded-mc-pee';
 import { geminiTransport } from 'embedded-mc-pee/gemini';
 ```
 
+## Examples
+
+Run worked examples (live Gemini, requires `GEMINI_API_KEY`):
+
+```bash
+GEMINI_API_KEY=your-key npm run test:examples
+```
+
+- `pig-latin` — canary test: single-turn text transformation
+- `doctor-scheduling` — showcase: state input, constraints, conflict handling
+- `guess-number` — tool loop: iteration budget, tool protocol, trace recording
+
+See `examples/README.md` for details.
+
 ## Minimal usage sketch
 
-**Note:** The API surfaces below land in coming work packages. Types shown are indicative.
+**Note:** The API surfaces below are available now. See `examples/` for runnable demonstrations.
 
 ```typescript
 import { createHarness, createContract } from 'embedded-mc-pee';

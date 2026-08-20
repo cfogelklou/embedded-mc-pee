@@ -61,7 +61,7 @@ jobs:
           cd "$CONSUMER_DIR"
           npm init -y
           npm install "$GITHUB_WORKSPACE"/*.tgz
-          node --input=- <<'EOF'
+          node --input-type=module - <<'EOF'
           (async () => {
             const pkg = await import('embedded-mc-pee');
             console.log('✓ embedded-mc-pee resolved successfully');
@@ -72,5 +72,52 @@ jobs:
           });
           EOF
 
-      # TODO: Git-dependency install test (requires pushed history)
-      # Deferred until repository is public and has commits
+  git-dep-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Create temp consumer and install from git
+        run: |
+          CONSUMER_DIR=$(mktemp -d)
+          echo "CONSUMER_DIR=$CONSUMER_DIR" >> "$GITHUB_ENV"
+          cd "$CONSUMER_DIR"
+          npm init -y
+          npm install github:cfogelklou/embedded-mc-pee#init/library
+
+      - name: Assert ESM entry
+        working-directory: ${{ env.CONSUMER_DIR }}
+        run: |
+          node --input-type=module -e "import('embedded-mc-pee').then(m => { if (typeof m.createHarness !== 'function') throw new Error('createHarness missing'); if (typeof m.createContract !== 'function') throw new Error('createContract missing'); })"
+
+      - name: Assert CJS entry
+        working-directory: ${{ env.CONSUMER_DIR }}
+        run: |
+          cat > test-cjs.cjs <<'EOF'
+          const pkg = require('embedded-mc-pee');
+          if (typeof pkg.createHarness !== 'function') throw new Error('createHarness missing');
+          if (typeof pkg.createContract !== 'function') throw new Error('createContract missing');
+          console.log('✓ CJS entry validated');
+          EOF
+          node test-cjs.cjs
+
+  es2017-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck with ES2017 target
+        run: npx tsc --noEmit -p tsconfig.es2017.json
