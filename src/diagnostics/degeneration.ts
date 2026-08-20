@@ -13,8 +13,19 @@
 /** Signals that identify a degenerate model output */
 export type DegenerationSignature =
   | 'max_tokens'
-  | 'ngram_repetition'
-  | 'config_error';
+  | 'ngram_repetition';
+
+/**
+ * Typed failure returned by {@link detectDegeneration} when the caller-supplied
+ * options are invalid. This is a harness configuration bug — it must never be
+ * treated as (or counted towards) model degeneration.
+ */
+export interface DegenerationConfigFailure {
+  /** Discriminating code for the configuration failure */
+  readonly code: 'config_error';
+  /** Human-readable description of the invalid option */
+  readonly message: string;
+}
 
 /**
  * Recommended default minimum number of consecutive repeated words before
@@ -72,6 +83,16 @@ export interface DegenerationVerdict {
 }
 
 /**
+ * Result of {@link detectDegeneration}: either a degeneration verdict, or a
+ * typed configuration failure when the caller-supplied options are invalid.
+ * Invalid options are NEVER reported as degeneration — a harness
+ * misconfiguration is not model behavior.
+ */
+export type DetectDegenerationResult =
+  | { readonly ok: true; readonly verdict: DegenerationVerdict }
+  | { readonly ok: false; readonly failure: DegenerationConfigFailure };
+
+/**
  * Detects degenerate LLM output:
  *
  * 1. `max_tokens` — the provider stopped at the token ceiling. Necessary
@@ -79,32 +100,59 @@ export interface DegenerationVerdict {
  * 2. `ngram_repetition` — some phrase of 1–N words repeats consecutively for
  *    at least `maxRepetitionRun` words in total. Conclusive on its own.
  *
+ * Invalid options are reported as a typed `{ ok: false, failure }` config
+ * failure, never as degeneration.
+ *
  * @param input - The input parameters for degeneration detection
  * @param options - Optional configuration to override defaults or input parameters
- * @returns Verdict indicating degeneration status and detected signatures
+ * @returns Verdict indicating degeneration status, or a typed config failure
  */
 export function detectDegeneration(
   input: DegenerationCheckInput,
   options?: DetectDegenerationOptions
-): DegenerationVerdict {
+): DetectDegenerationResult {
   const signatures: DegenerationSignature[] = [];
 
-  // Validate options if provided
+  // Validate options if provided: a config bug is not model degeneration
   if (options?.maxRepetitionRun !== undefined) {
     if (typeof options.maxRepetitionRun !== 'number' || !Number.isFinite(options.maxRepetitionRun)) {
-      return { degenerate: true, signatures: ['config_error'] };
+      return {
+        ok: false,
+        failure: {
+          code: 'config_error',
+          message: `Invalid maxRepetitionRun option: must be a finite number, got ${String(options.maxRepetitionRun)}`
+        }
+      };
     }
     if (options.maxRepetitionRun <= 0) {
-      return { degenerate: true, signatures: ['config_error'] };
+      return {
+        ok: false,
+        failure: {
+          code: 'config_error',
+          message: `Invalid maxRepetitionRun option: must be positive, got ${options.maxRepetitionRun}`
+        }
+      };
     }
   }
 
   if (options?.maxRepeatPeriodWords !== undefined) {
     if (typeof options.maxRepeatPeriodWords !== 'number' || !Number.isFinite(options.maxRepeatPeriodWords)) {
-      return { degenerate: true, signatures: ['config_error'] };
+      return {
+        ok: false,
+        failure: {
+          code: 'config_error',
+          message: `Invalid maxRepeatPeriodWords option: must be a finite number, got ${String(options.maxRepeatPeriodWords)}`
+        }
+      };
     }
     if (options.maxRepeatPeriodWords <= 0) {
-      return { degenerate: true, signatures: ['config_error'] };
+      return {
+        ok: false,
+        failure: {
+          code: 'config_error',
+          message: `Invalid maxRepeatPeriodWords option: must be positive, got ${options.maxRepeatPeriodWords}`
+        }
+      };
     }
   }
 
@@ -120,7 +168,7 @@ export function detectDegeneration(
     signatures.push('ngram_repetition');
   }
 
-  return { degenerate: signatures.length > 0, signatures };
+  return { ok: true, verdict: { degenerate: signatures.length > 0, signatures } };
 }
 
 /**

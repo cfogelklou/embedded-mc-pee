@@ -154,6 +154,66 @@ describe('createContract — invalid manifests return typed failures', () => {
     expect(failureCodesOf(result)).toContain('duplicate_conditional_field');
   });
 
+  it('rejects "state" as a conditional field name (reserved envelope field)', () => {
+    const result = createContract(
+      {
+        ...baseManifest,
+        envelope: {
+          conditionalFields: [
+            { field: 'state', requiredForStates: ['question'] }
+          ]
+        }
+      },
+      acceptObjects
+    );
+    expect(failureCodesOf(result)).toContain('reserved_field_name');
+    if (!result.ok) {
+      const failure = result.failures.find(f => f.code === 'reserved_field_name');
+      expect(failure).toBeDefined();
+      expect(failure?.message).toContain('state');
+      expect(failure?.message).toContain('reserved');
+      expect(failure?.fieldPath).toBe('$.envelope.conditionalFields[0].field');
+    }
+  });
+
+  it('rejects "payload" as a conditional field name (reserved envelope field)', () => {
+    const result = createContract(
+      {
+        ...baseManifest,
+        envelope: {
+          conditionalFields: [
+            { field: 'payload', requiredForStates: ['analysis'] }
+          ]
+        }
+      },
+      acceptObjects
+    );
+    expect(failureCodesOf(result)).toContain('reserved_field_name');
+    if (!result.ok) {
+      const failure = result.failures.find(f => f.code === 'reserved_field_name');
+      expect(failure).toBeDefined();
+      expect(failure?.message).toContain('payload');
+      expect(failure?.message).toContain('reserved');
+      expect(failure?.fieldPath).toBe('$.envelope.conditionalFields[0].field');
+    }
+  });
+
+  it('accepts known conditional field names (questionText, explanation)', () => {
+    const result = createContract(
+      {
+        ...baseManifest,
+        envelope: {
+          conditionalFields: [
+            { field: 'questionText', requiredForStates: ['question'] },
+            { field: 'explanation', requiredForStates: ['infeasible'] }
+          ]
+        }
+      },
+      acceptObjects
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it('collects multiple failures instead of throwing on the first', () => {
     const result = createContract(
       {

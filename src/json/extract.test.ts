@@ -17,7 +17,10 @@ describe('extractJson', () => {
 
     const result = extractJson(raw);
     expect(result.ok).toBe(true);
-    expect(result.parsed).toMatchObject({ state: 'proposal' });
+    if (result.ok) {
+      expect(result.parsed).toMatchObject({ state: 'proposal' });
+      expect(result.rawJsonString).toBe(raw);
+    }
   });
 
   it('extracts JSON from a single markdown json code fence', () => {
@@ -30,10 +33,12 @@ describe('extractJson', () => {
 
     const result = extractJson(raw);
     expect(result.ok).toBe(true);
-    expect(result.parsed).toMatchObject({
-      state: 'question',
-      questionText: 'Which venue do you mean?'
-    });
+    if (result.ok) {
+      expect(result.parsed).toMatchObject({
+        state: 'question',
+        questionText: 'Which venue do you mean?'
+      });
+    }
   });
 
   it('extracts JSON from a single markdown code fence without language tag', () => {
@@ -48,50 +53,64 @@ describe('extractJson', () => {
 
     const result = extractJson(raw);
     expect(result.ok).toBe(true);
-    expect(result.parsed).toMatchObject({ state: 'analysis' });
+    if (result.ok) {
+      expect(result.parsed).toMatchObject({ state: 'analysis' });
+    }
   });
 
   it('rejects output with trailing prose after bare JSON', () => {
     const raw = '{"state":"proposal"}\nHere is some additional explanation for you!';
     const result = extractJson(raw);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+    }
   });
 
   it('rejects output with leading prose before bare JSON', () => {
     const raw = 'Sure, here is the proposal:\n{"state":"proposal"}';
     const result = extractJson(raw);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+    }
   });
 
   it('rejects output with trailing prose after closing code fence', () => {
     const raw = '```json\n{"state":"question"}\n```\nHope this helps!';
     const result = extractJson(raw);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+    }
   });
 
   it('rejects output with multiple markdown code fences', () => {
     const raw = '```json\n{"state":"proposal"}\n```\n```json\n{"state":"infeasible"}\n```';
     const result = extractJson(raw);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+    }
   });
 
   it('rejects truncated / unbalanced JSON', () => {
     const raw = '{"state":"proposal","teams":[';
     const result = extractJson(raw);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+    }
   });
 
   it('rejects output exceeding DEFAULT_MAX_RAW_OUTPUT_CHARS', () => {
     const largeProse = 'x'.repeat(DEFAULT_MAX_RAW_OUTPUT_CHARS + 10);
     const result = extractJson(largeProse);
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('oversized_output');
-    expect(result.failure?.safeMessage).toContain('exceeds maximum raw character limit');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('oversized_output');
+      expect(result.failure.safeMessage).toContain('exceeds maximum raw character limit');
+    }
   });
 
   it('rejects non-object JSON values like arrays or primitives', () => {
@@ -104,8 +123,10 @@ describe('extractJson', () => {
   it('rejects empty string', () => {
     const result = extractJson('');
     expect(result.ok).toBe(false);
-    expect(result.failure?.code).toBe('malformed_json');
-    expect(result.failure?.safeMessage).toContain('empty');
+    if (!result.ok) {
+      expect(result.failure.code).toBe('malformed_json');
+      expect(result.failure.safeMessage).toContain('empty');
+    }
   });
 
   it('rejects non-string input', () => {
@@ -126,8 +147,10 @@ describe('extractJson', () => {
       const largeJson = '{"state":"proposal","data":"' + 'x'.repeat(customLimit + 10) + '"}';
       const result = extractJson(largeJson, { maxRawOutputChars: customLimit });
       expect(result.ok).toBe(false);
-      expect(result.failure?.code).toBe('oversized_output');
-      expect(result.failure?.safeMessage).toContain(`${customLimit}`);
+      if (!result.ok) {
+        expect(result.failure.code).toBe('oversized_output');
+        expect(result.failure.safeMessage).toContain(`${customLimit}`);
+      }
     });
 
     it('allows larger limit via maxRawOutputChars option', () => {
@@ -140,29 +163,37 @@ describe('extractJson', () => {
     it('rejects non-finite maxRawOutputChars option with config_error', () => {
       const result = extractJson('{"state":"proposal"}', { maxRawOutputChars: NaN });
       expect(result.ok).toBe(false);
-      expect(result.failure?.code).toBe('config_error');
-      expect(result.failure?.safeMessage).toContain('must be a finite number');
+      if (!result.ok) {
+        expect(result.failure.code).toBe('config_error');
+        expect(result.failure.safeMessage).toContain('must be a finite number');
+      }
     });
 
     it('rejects infinite maxRawOutputChars option with config_error', () => {
       const result = extractJson('{"state":"proposal"}', { maxRawOutputChars: Infinity });
       expect(result.ok).toBe(false);
-      expect(result.failure?.code).toBe('config_error');
-      expect(result.failure?.safeMessage).toContain('must be a finite number');
+      if (!result.ok) {
+        expect(result.failure.code).toBe('config_error');
+        expect(result.failure.safeMessage).toContain('must be a finite number');
+      }
     });
 
     it('rejects non-positive maxRawOutputChars option with config_error', () => {
       const result = extractJson('{"state":"proposal"}', { maxRawOutputChars: 0 });
       expect(result.ok).toBe(false);
-      expect(result.failure?.code).toBe('config_error');
-      expect(result.failure?.safeMessage).toContain('must be positive');
+      if (!result.ok) {
+        expect(result.failure.code).toBe('config_error');
+        expect(result.failure.safeMessage).toContain('must be positive');
+      }
     });
 
     it('rejects negative maxRawOutputChars option with config_error', () => {
       const result = extractJson('{"state":"proposal"}', { maxRawOutputChars: -100 });
       expect(result.ok).toBe(false);
-      expect(result.failure?.code).toBe('config_error');
-      expect(result.failure?.safeMessage).toContain('must be positive');
+      if (!result.ok) {
+        expect(result.failure.code).toBe('config_error');
+        expect(result.failure.safeMessage).toContain('must be positive');
+      }
     });
 
     it('includes effective limit in oversized error message', () => {
@@ -170,7 +201,9 @@ describe('extractJson', () => {
       const tooLarge = '{"data":"' + 'x'.repeat(customLimit + 10) + '"}';
       const result = extractJson(tooLarge, { maxRawOutputChars: customLimit });
       expect(result.ok).toBe(false);
-      expect(result.failure?.safeMessage).toMatch(new RegExp(`\\(.* > ${customLimit}\\)`));
+      if (!result.ok) {
+        expect(result.failure.safeMessage).toMatch(new RegExp(`\\(.* > ${customLimit}\\)`));
+      }
     });
   });
 });

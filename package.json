@@ -55,6 +55,7 @@
     "test:examples": "vitest run --config examples/vitest.config.ts",
     "lint": "eslint src examples",
     "typecheck": "tsc --noEmit",
+    "typecheck:es2017": "tsc --noEmit -p tsconfig.es2017.json",
     "prepare": "npm run build"
   }
 }

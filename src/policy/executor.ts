@@ -468,7 +468,7 @@ export function createHarness<P>(
         if (resp.toolCall) {
           const extracted = extractJson(resp.rawText);
           const ambiguous = extracted.ok && extracted.parsed !== undefined;
-          return { toolCall: resp.toolCall, extractedJson: extracted.parsed, ambiguous };
+          return { toolCall: resp.toolCall, extractedJson: extracted.ok ? extracted.parsed : undefined, ambiguous };
         }
         const extracted = extractJson(resp.rawText);
         return { extractedJson: extracted.ok ? extracted.parsed : undefined, ambiguous: false };
@@ -484,6 +484,77 @@ export function createHarness<P>(
             explanation: 'I was unable to validate a response from the model.'
           }
         };
+      };
+
+      // Tool declarations are fixed for the whole turn
+      const toolDeclarations = options.tools?.map(tb => tb.contract) ?? [];
+
+      /**
+       * Runs ONE repair attempt for a failed candidate output: builds the
+       * repair prompt (full contract prompt + error preamble + bounded
+       * diagnostic snippet of the failed raw output), calls the model once,
+       * and validates the repaired candidate. The caller checks and decrements
+       * the repair budget; every non-success outcome maps to "fall back to the
+       * next model".
+       */
+      const attemptRepair = async (
+        model: string,
+        iteration: number,
+        failureDescription: string,
+        failedOutputSnippet: string
+      ): Promise<{ readonly ok: true; readonly turn: AgentTurn<P> } | { readonly ok: false }> => {
+        const repairPrompt = `${composeFullPrompt()}
+
+The previous response failed validation:
+Validation Error: ${failureDescription}
+
+Previous response (bounded excerpt): ${failedOutputSnippet}
+
+Please fix the error and return ONLY a valid JSON object following the output contract.`;
+
+        const repairReq: LlmRequest = {
+          model,
+          systemInstruction: input.systemInstruction,
+          promptText: repairPrompt,
+          toolDeclarations,
+          temperature: resolved.temperature,
+          maxOutputTokens: resolved.maxOutputTokens,
+          thinkingLevel: resolved.thinkingLevel
+        };
+
+        const callStart = resolved.now();
+        try {
+          const remainingBudget = resolved.totalBudgetMs - (callStart - startedAt);
+          if (remainingBudget < resolved.minBudgetForRepairMs) {
+            addTrace({ kind: 'repair', attempt: iteration, outcome: 'skipped_budget', detail: 'Insufficient budget for repair' });
+            return { ok: false };
+          }
+
+          const timeoutMs = Math.min(resolved.perModelTimeoutMs, Math.max(remainingBudget, 1));
+          const repairResp = await Promise.race([
+            resolved.transport.complete(repairReq, { timeoutMs }),
+            new Promise<LlmResponse>((_, reject) => resolved.sleep(timeoutMs).then(() => reject(new Error('Repair call timed out'))))
+          ]);
+
+          const repairCandidate = normalizeCandidate(repairResp);
+          if (!repairCandidate.extractedJson) {
+            addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_extraction' });
+            return { ok: false };
+          }
+
+          const repairValidation = validateEnvelopeOutput(repairCandidate.extractedJson, contract.validateHostPayload);
+          if (!repairValidation.ok) {
+            addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_validation', detail: repairValidation.failure.code });
+            return { ok: false };
+          }
+
+          emit({ type: 'repair_succeeded', correlationId, attempt: iteration });
+          addTrace({ kind: 'repair', attempt: iteration, outcome: 'succeeded' });
+          return { ok: true, turn: repairValidation.value };
+        } catch (err) {
+          addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed', detail: err instanceof Error ? err.message : 'Unknown error' });
+          return { ok: false };
+        }
       };
 
       // Main policy loop: model fallback chain
@@ -554,7 +625,6 @@ export function createHarness<P>(
           }
 
           // Compose request
-          const toolDeclarations = options.tools?.map(tb => tb.contract) ?? [];
           const req: LlmRequest = {
             model,
             systemInstruction: input.systemInstruction,
@@ -627,10 +697,36 @@ export function createHarness<P>(
           }
 
           // Check degeneration (on raw text, before validation)
-          const degeneration = detectDegeneration({
+          const degenerationResult = detectDegeneration({
             rawText: resp.rawText,
             finishReason: resp.finishReason
           });
+
+          // A config failure here is a harness configuration bug — a hard
+          // typed failure. It is NOT degeneration: no degeneration counter is
+          // consumed, no retry, no model fallback.
+          if (!degenerationResult.ok) {
+            dbg.error('Degeneration detection config failure:', degenerationResult.failure.message);
+            addTrace({
+              kind: 'decision',
+              decision: 'degeneration_config_error',
+              detail: degenerationResult.failure.message
+            });
+            const failureContext: FailureContext = {
+              correlationId,
+              lastFailure: { code: 'schema_invalid', message: `Harness configuration error: ${degenerationResult.failure.message}` },
+              trace: { correlationId, entries: state.traceEntries, startedAt, endedAt: resolved.now() }
+            };
+            const fallbackTurn = (options.onFallbackExhausted ?? defaultFallbackHandler)(failureContext);
+            return {
+              ok: false,
+              kind: 'config',
+              turn: fallbackTurn,
+              trace: { correlationId, entries: state.traceEntries, startedAt, endedAt: resolved.now() }
+            };
+          }
+
+          const degeneration = degenerationResult.verdict;
 
           if (degeneration.degenerate) {
             emit({
@@ -779,66 +875,22 @@ export function createHarness<P>(
               emit({ type: 'repair_attempted', correlationId, attempt: iteration });
               addTrace({ kind: 'repair', attempt: iteration, outcome: 'attempted' });
 
-              // Attempt repair with error preamble
-              const repairError = 'No valid JSON object could be extracted from the response. Please provide a valid JSON response.';
-              const repairPrompt = `${composeFullPrompt()}
-
-The previous response failed validation:
-Validation Error: ${repairError}
-
-Please fix the error and return ONLY a valid JSON object following the output contract.`;
-
-              const repairReq: LlmRequest = {
+              const repair = await attemptRepair(
                 model,
-                systemInstruction: input.systemInstruction,
-                promptText: repairPrompt,
-                toolDeclarations,
-                temperature: resolved.temperature,
-                maxOutputTokens: resolved.maxOutputTokens,
-                thinkingLevel: resolved.thinkingLevel
-              };
-
-              const callStart = resolved.now();
-              try {
-                const remainingBudget = resolved.totalBudgetMs - (callStart - startedAt);
-                if (remainingBudget < resolved.minBudgetForRepairMs) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'skipped_budget', detail: 'Insufficient budget for repair' });
-                  break;
-                }
-
-                const timeoutMs = Math.min(resolved.perModelTimeoutMs, Math.max(remainingBudget, 1));
-                const repairResp = await Promise.race([
-                  resolved.transport.complete(repairReq, { timeoutMs }),
-                  new Promise<LlmResponse>((_, reject) => resolved.sleep(timeoutMs).then(() => reject(new Error('Repair call timed out'))))
-                ]);
-
-                const repairCandidate = normalizeCandidate(repairResp);
-                if (!repairCandidate.extractedJson) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_extraction' });
-                  break;
-                }
-
-                const repairValidation = validateEnvelopeOutput(repairCandidate.extractedJson, contract.validateHostPayload);
-                if (!repairValidation.ok) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_validation', detail: repairValidation.failure.code });
-                  break;
-                }
-
-                // Repair succeeded
-                emit({ type: 'repair_succeeded', correlationId, attempt: iteration });
-                addTrace({ kind: 'repair', attempt: iteration, outcome: 'succeeded' });
+                iteration,
+                'No valid JSON object could be extracted from the response. Please provide a valid JSON response.',
+                snippet
+              );
+              if (repair.ok) {
                 return {
                   ok: true,
-                  turn: repairValidation.value,
+                  turn: repair.turn,
                   trace: { correlationId, entries: state.traceEntries, startedAt, endedAt: resolved.now() }
                 };
-              } catch (err) {
-                addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed', detail: err instanceof Error ? err.message : 'Unknown error' });
-                break;
               }
             }
 
-            // No repairs left -> fall back to next model
+            // Repair impossible or failed -> fall back to next model
             break;
           }
 
@@ -851,66 +903,22 @@ Please fix the error and return ONLY a valid JSON object following the output co
               emit({ type: 'repair_attempted', correlationId, attempt: iteration });
               addTrace({ kind: 'repair', attempt: iteration, outcome: 'attempted' });
 
-              // Attempt repair with error preamble
-              const repairError = `Validation failed: ${validation.failure.code} - ${validation.failure.message}`;
-              const repairPrompt = `${composeFullPrompt()}
-
-The previous response failed validation:
-Validation Error: ${repairError}
-
-Please fix the error and return ONLY a valid JSON object following the output contract.`;
-
-              const repairReq: LlmRequest = {
+              const repair = await attemptRepair(
                 model,
-                systemInstruction: input.systemInstruction,
-                promptText: repairPrompt,
-                toolDeclarations,
-                temperature: resolved.temperature,
-                maxOutputTokens: resolved.maxOutputTokens,
-                thinkingLevel: resolved.thinkingLevel
-              };
-
-              const callStart = resolved.now();
-              try {
-                const remainingBudget = resolved.totalBudgetMs - (callStart - startedAt);
-                if (remainingBudget < resolved.minBudgetForRepairMs) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'skipped_budget', detail: 'Insufficient budget for repair' });
-                  break;
-                }
-
-                const timeoutMs = Math.min(resolved.perModelTimeoutMs, Math.max(remainingBudget, 1));
-                const repairResp = await Promise.race([
-                  resolved.transport.complete(repairReq, { timeoutMs }),
-                  new Promise<LlmResponse>((_, reject) => resolved.sleep(timeoutMs).then(() => reject(new Error('Repair call timed out'))))
-                ]);
-
-                const repairCandidate = normalizeCandidate(repairResp);
-                if (!repairCandidate.extractedJson) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_extraction' });
-                  break;
-                }
-
-                const repairValidation = validateEnvelopeOutput(repairCandidate.extractedJson, contract.validateHostPayload);
-                if (!repairValidation.ok) {
-                  addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_validation', detail: repairValidation.failure.code });
-                  break;
-                }
-
-                // Repair succeeded
-                emit({ type: 'repair_succeeded', correlationId, attempt: iteration });
-                addTrace({ kind: 'repair', attempt: iteration, outcome: 'succeeded' });
+                iteration,
+                `Validation failed: ${validation.failure.code} - ${validation.failure.message}`,
+                snippet
+              );
+              if (repair.ok) {
                 return {
                   ok: true,
-                  turn: repairValidation.value,
+                  turn: repair.turn,
                   trace: { correlationId, entries: state.traceEntries, startedAt, endedAt: resolved.now() }
                 };
-              } catch (err) {
-                addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed', detail: err instanceof Error ? err.message : 'Unknown error' });
-                break;
               }
             }
 
-            // No repairs left -> fall back to next model
+            // Repair impossible or failed -> fall back to next model
             break;
           }
 

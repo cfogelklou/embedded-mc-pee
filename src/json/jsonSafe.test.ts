@@ -5,7 +5,7 @@
  * (JSON safety describe block).
  */
 import { describe, it, expect } from 'vitest';
-import { assertJsonSafe, isJsonSafe } from './jsonSafe';
+import { assertJsonSafe, isJsonSafe, JsonSafetyError } from './jsonSafe';
 
 describe('assertJsonSafe and isJsonSafe', () => {
   it('accepts valid JSON-serializable values', () => {
@@ -20,19 +20,59 @@ describe('assertJsonSafe and isJsonSafe', () => {
     expect(isJsonSafe(valid)).toBe(true);
   });
 
-  it('rejects NaN, Infinity, -Infinity', () => {
-    expect(() => assertJsonSafe({ val: NaN })).toThrow(/JSON safety violation/);
-    expect(() => assertJsonSafe({ val: Infinity })).toThrow(/JSON safety violation/);
-    expect(() => assertJsonSafe([1, 2, -Infinity])).toThrow(/JSON safety violation/);
+  it('rejects NaN, Infinity, -Infinity with JsonSafetyError', () => {
+    expect(() => assertJsonSafe({ val: NaN })).toThrow(JsonSafetyError);
+    expect(() => assertJsonSafe({ val: Infinity })).toThrow(JsonSafetyError);
+    expect(() => assertJsonSafe([1, 2, -Infinity])).toThrow(JsonSafetyError);
     expect(isJsonSafe({ bad: NaN })).toBe(false);
   });
 
-  it('rejects functions, symbols, and bigints', () => {
-    expect(() => assertJsonSafe({ fn: () => {} })).toThrow(/JSON safety violation/);
-    expect(() => assertJsonSafe({ sym: Symbol('foo') })).toThrow(/JSON safety violation/);
+  it('JsonSafetyError has structured path and kind fields', () => {
+    try {
+      assertJsonSafe({ a: { b: NaN } });
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.path).toBe('$.a.b');
+        expect(err.kind).toBe('non_finite_number');
+        expect(err.message).toContain('$.a.b');
+      }
+    }
+  });
+
+  it('rejects functions, symbols, and bigints with correct kind', () => {
+    try {
+      assertJsonSafe({ fn: () => {} });
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.kind).toBe('function');
+      }
+    }
+
+    try {
+      assertJsonSafe({ sym: Symbol('foo') });
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.kind).toBe('symbol');
+      }
+    }
+
     // Use BigInt constructor for ES2017 compatibility (test validates rejection behavior)
     if (typeof BigInt !== 'undefined') {
-      expect(() => assertJsonSafe({ big: BigInt(10) })).toThrow(/JSON safety violation/);
+      try {
+        assertJsonSafe({ big: BigInt(10) });
+        expect.fail('Should have thrown JsonSafetyError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(JsonSafetyError);
+        if (err instanceof JsonSafetyError) {
+          expect(err.kind).toBe('bigint');
+        }
+      }
     }
     expect(isJsonSafe({ fn: () => {} })).toBe(false);
   });
@@ -65,15 +105,44 @@ describe('assertJsonSafe and isJsonSafe', () => {
     expect(isJsonSafe(undefined)).toBe(true);
   });
 
-  it('detects circular references', () => {
+  it('detects circular references with JsonSafetyError', () => {
     const circular: Record<string, unknown> = { name: 'test' };
     circular.self = circular;
-    expect(() => assertJsonSafe(circular)).toThrow(/circular reference/);
+
+    try {
+      assertJsonSafe(circular);
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.kind).toBe('circular_reference');
+        expect(err.path).toBe('$.self');
+      }
+    }
     expect(isJsonSafe(circular)).toBe(false);
   });
 
   it('reports correct path in error messages', () => {
-    expect(() => assertJsonSafe({ a: { b: NaN } })).toThrow(/path "\$\.a\.b"/);
-    expect(() => assertJsonSafe([1, [2, Infinity]])).toThrow(/path "\$\[1\]\[1\]"/);
+    try {
+      assertJsonSafe({ a: { b: NaN } });
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.path).toBe('$.a.b');
+        expect(err.message).toContain('$.a.b');
+      }
+    }
+
+    try {
+      assertJsonSafe([1, [2, Infinity]]);
+      expect.fail('Should have thrown JsonSafetyError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JsonSafetyError);
+      if (err instanceof JsonSafetyError) {
+        expect(err.path).toBe('$[1][1]');
+        expect(err.message).toContain('$[1][1]');
+      }
+    }
   });
 });

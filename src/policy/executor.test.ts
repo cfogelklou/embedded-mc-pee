@@ -1023,6 +1023,15 @@ describe('Agent Harness Executor', () => {
         const repairEntry = turnResult.trace.entries.find(e => e.kind === 'repair');
         expect(repairEntry).toBeDefined();
       }
+
+      // Repair prompt structure: error preamble + bounded snippet of the
+      // failed raw output + fix instruction.
+      expect(transport.requests.length).toBe(2);
+      const repairPrompt = transport.requests[1].promptText;
+      expect(repairPrompt).toContain('Validation Error:');
+      expect(repairPrompt).toContain('Previous response (bounded excerpt):');
+      expect(repairPrompt).toContain('This is not valid JSON at all');
+      expect(repairPrompt).toContain('Please fix the error and return ONLY a valid JSON object');
     });
 
     it('attempts repair when validation fails', async () => {
@@ -1060,6 +1069,14 @@ describe('Agent Harness Executor', () => {
         const repairEntry = turnResult.trace.entries.find(e => e.kind === 'repair' && e.outcome === 'succeeded');
         expect(repairEntry).toBeDefined();
       }
+
+      // Validation-path repair prompts now also carry the bounded snippet of
+      // the failed raw output (structure assertion, not exact copy).
+      expect(transport.requests.length).toBe(2);
+      const repairPrompt = transport.requests[1].promptText;
+      expect(repairPrompt).toContain('Validation Error:');
+      expect(repairPrompt).toContain('Previous response (bounded excerpt):');
+      expect(repairPrompt).toContain('invalid_state');
     });
 
     it('falls back to next model when repair fails', async () => {

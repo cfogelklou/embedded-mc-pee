@@ -140,6 +140,7 @@ export type TraceEntry =
         | 'tool_skipped_final_iteration'
         | 'degeneration_abort'
         | 'repair_skipped_degenerate'
+        | 'degeneration_config_error'
         | 'transient_backoff'
         | 'budget_exhausted';
       readonly detail?: string;
@@ -226,13 +227,15 @@ export interface HarnessTurnInput {
  *
  * Success (`ok: true`) returns a validated {@link AgentTurn<P>}` with trace.
  * Failure (`ok: false`) returns a typed failure kind with an {@link AgentTurn<never>}
- * (question envelope) and trace.
+ * (question envelope) and trace. The `config` kind is a hard failure: a
+ * harness configuration bug (e.g. invalid degeneration-detection options)
+ * that must not be retried or treated as model behavior.
  *
  * @template P - Payload type (only present when state === 'proposal')
  */
 export type HarnessResult<P> =
   | { readonly ok: true; readonly turn: AgentTurn<P>; readonly trace: TurnTrace }
-  | { readonly ok: false; readonly kind: 'exhausted' | 'budget' | 'all_fallbacks'; readonly turn: AgentTurn<never>; readonly trace: TurnTrace };
+  | { readonly ok: false; readonly kind: 'exhausted' | 'budget' | 'all_fallbacks' | 'config'; readonly turn: AgentTurn<never>; readonly trace: TurnTrace };
 
 /**
  * Agent harness interface — the public entry point for tool-calling LLM turns.

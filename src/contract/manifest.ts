@@ -19,6 +19,17 @@ import type { JsonSchemaObject } from '../tool/toolContract';
 export const KNOWN_ENVELOPE_CONDITIONAL_FIELDS = ['questionText', 'explanation'] as const;
 
 /**
+ * Envelope field names reserved for core envelope structure.
+ *
+ * These names cannot be used as conditional field names in a manifest. The
+ * `state` field is the envelope discriminator (the `state` property in the
+ * JSON Schema), and `payload` is the proposal-state payload slot. Using either
+ * as a conditional field name would corrupt the derived tool schema and prompt
+ * contract by overwriting a core envelope property.
+ */
+export const RESERVED_ENVELOPE_FIELD_NAMES = ['state', 'payload'] as const;
+
+/**
  * One state-conditional envelope field rule.
  *
  * Declares that `field` must be present whenever the envelope state is one of

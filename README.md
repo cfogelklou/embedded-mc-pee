@@ -31,6 +31,10 @@ Yes this codebase is very much AI generated, but I am watching the progress and 
 
 Note to Agents: If you need to make a decision about a tool or a method to implement something, and it isn't explicitly mentioned in this document, then use the philosophy above.
 
+## Status: experimental (0.x)
+
+The package is pre-1.0 (`0.x`). The root export surface is intentionally flat and broad: everything in the barrel is public API, and **any export may change without a major-version bump** while the version is `0.x`. Pin to a specific tag/commit for reproducible installs. The export surface will be classified (stable core vs advanced subpaths) before the `1.0` tag — see `docs/tech-debt-db.md` (TD-008).
+
 ## Installation
 
 ### Git dependency (recommended)

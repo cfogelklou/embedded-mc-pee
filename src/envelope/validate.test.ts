@@ -559,5 +559,43 @@ describe('validateEnvelopeOutput', () => {
         expect(result.value.payload).toBe('proposal-data');
       }
     });
+
+    it('should omit payload key for non-proposal states', () => {
+      // Test each non-proposal state
+      const nonProposalStates: Array<EnvelopeState> = ['question', 'analysis', 'infeasible'];
+
+      for (const state of nonProposalStates) {
+        const input = state === 'question'
+          ? { state, questionText: 'Test question?' }
+          : { state, explanation: 'Test explanation' };
+
+        const result = validateEnvelopeOutput(input, createMockSuccessValidator());
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          // Payload key should not exist at all for non-proposal states
+          expect('payload' in result.value).toBe(false);
+          expect(Object.keys(result.value)).not.toContain('payload');
+          expect(result.value.payload).toBeUndefined();
+        }
+      }
+    });
+
+    it('should include payload key only for proposal state', () => {
+      const input = {
+        state: 'proposal' as const,
+        payload: 'test-payload'
+      };
+
+      const result = validateEnvelopeOutput(input, createMockSuccessValidator('test-payload'));
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Payload key should exist for proposal state
+        expect('payload' in result.value).toBe(true);
+        expect(Object.keys(result.value)).toContain('payload');
+        expect(result.value.payload).toBe('test-payload');
+      }
+    });
   });
 });

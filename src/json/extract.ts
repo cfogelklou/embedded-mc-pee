@@ -31,16 +31,14 @@ export interface ExtractJsonOptions {
   readonly maxRawOutputChars?: number;
 }
 
-/** Result shape for JSON extraction */
-export interface JsonExtractionResult {
-  ok: boolean;
-  rawJsonString?: string;
-  parsed?: unknown;
-  failure?: {
-    code: 'malformed_json' | 'oversized_output' | 'schema_invalid' | 'config_error';
-    safeMessage: string;
-  };
-}
+/**
+ * Result shape for JSON extraction.
+ *
+ * Discriminated union: check `ok` to narrow between success and failure.
+ */
+export type JsonExtractionResult =
+  | { ok: true; rawJsonString: string; parsed: unknown }
+  | { ok: false; failure: { code: 'malformed_json' | 'oversized_output' | 'schema_invalid' | 'config_error'; safeMessage: string } };
 
 /**
  * Bounded head+tail snippet of a failed raw model output, for log-based

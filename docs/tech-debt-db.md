@@ -4,7 +4,14 @@ Record of discovered debt with resolution plans. Format: `TD-XXX: [Title] — [S
 
 ## Active debt
 
-None yet — library is newly scaffolded (WP-A).
+- **TD-001: transientErrors casts** — Open — `src/policy/transientErrors.ts` reads provider error status through type casts instead of a reusable `unknown`-narrowing guard. Works, but weakens the type contract. — Replace casts with a small typed `unknown` guard helper; add tests for non-Error throwables. (From 2026-08-20 architecture review.)
+- **TD-002: fence tolerance + JSON-safe reference policy options undecided** — Open — `extractJson` fence syntax (`jsonFencePattern` / `allowIndentedFence`, nested-fence rejection) and `jsonSafe` cycle/reference semantics (`referencePolicy: 'reject_cycles' | 'allow_shared'`, `objectPolicy`) are fixed, not caller-configurable. Fine with one consumer; revisit if a host reports provider variation. — Decide per option when a second host use case appears; until then document as fixed protocol invariants. (2026-08-20 review, tunables sweep.)
+- **TD-003: debug formatter host injection undecided** — Open — `src/debug/debug.ts` timestamp format (local `HH:MM:SS.mmm`) and fallback value rendering (`String(value)`) are fixed. — Add `timestampFormatter` / `debugValueRenderer` options only if a host needs log-pipeline integration. (2026-08-20 review.)
+- **TD-004: transientErrors module placement** — Open — `src/policy/transientErrors.ts` classifies provider transport errors but lives under policy; only one consumer today. — Move to a transport-adjacent seam when a second transport/policy consumer or provider adapter appears. (2026-08-20 review.)
+- **TD-005: docs/emcp-plan.md staleness** — Open — Plan doc still marks `examples/vitest.config.ts` as future work and describes the barrel as scaffold-only; both have landed. — Refresh plan work-package statuses at next plan touch, or fold the plan into `docs/architecture.md` when extraction finishes. (2026-08-20 review.)
+- **TD-006: type-aware ESLint upgrade** — Open — `eslint.config.js` uses `tseslint.configs.strict`, not `strictTypeChecked`. — Measure rule noise on a branch, then upgrade; fix fallout mechanically. (2026-08-20 review.)
+- **TD-007: remaining fixed tunables** — Open — `tokenLimitFinishReasons` (only `MAX_TOKENS`), transient status codes (503/429 only), record/replay diagnostic snippet length (100 chars) are hardcoded. All single-use today. — Convert to `DEFAULT_*` + options if a host needs variation. (2026-08-20 review, tunables sweep.)
+- **TD-008: root export surface breadth** — Open — Decision (2026-08-20): keep the flat root barrel and let `0.x` semver signal instability; README documents this. Revisit classification into stable-core / advanced / subpath exports before the `1.0` tag. — At 1.0 planning: run deletion test over `src/index.ts` exports, move advanced utilities (hashing, record formats, derivation internals) to explicit subpaths if warranted.
 
 ## Archived debt
 

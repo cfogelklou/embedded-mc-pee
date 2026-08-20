@@ -15,6 +15,7 @@ import type {
 import { ENVELOPE_STATES } from '../envelope/envelope';
 import type { JsonSchemaObject } from '../tool/toolContract';
 import { canonicalizeManifest, deriveToolSchema, renderPromptContract } from './derive';
+import { RESERVED_ENVELOPE_FIELD_NAMES } from './manifest';
 import type { ContractManifest } from './manifest';
 
 // ============================================================================
@@ -65,6 +66,7 @@ export type ManifestFailureCode =
   | 'duplicate_conditional_field'
   | 'conditional_field_states_empty'
   | 'conditional_field_state_not_envelope_state'
+  | 'reserved_field_name'
   | 'metadata_value_not_string';
 
 /**
@@ -192,6 +194,13 @@ function validateManifest(manifest: unknown): readonly ManifestFailure[] {
             failures.push({
               code: 'duplicate_conditional_field',
               message: `Duplicate conditional field "${field}".`,
+              fieldPath: `$.envelope.conditionalFields[${index}].field`
+            });
+          }
+          if ((RESERVED_ENVELOPE_FIELD_NAMES as readonly string[]).includes(field)) {
+            failures.push({
+              code: 'reserved_field_name',
+              message: `Conditional field "${field}" uses a reserved envelope field name. Reserved names are: ${RESERVED_ENVELOPE_FIELD_NAMES.join(', ')}.`,
               fieldPath: `$.envelope.conditionalFields[${index}].field`
             });
           }

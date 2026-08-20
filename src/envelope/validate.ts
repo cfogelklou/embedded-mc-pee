@@ -16,69 +16,9 @@ import type {
 
 import { ENVELOPE_STATES } from './envelope';
 
-// ============================================================================
-// JSON-Safety Checks (Local Implementation)
-// ============================================================================
-
-/**
- * Asserts that a value is JSON-safe (can be serialized without data loss).
- *
- * JSON-safe values are: null, undefined, finite numbers, strings, booleans,
- * arrays of JSON-safe values, and plain objects with JSON-safe values.
- *
- * Rejects: NaN, Infinity, -Infinity, functions, symbols, BigInt, circular refs.
- *
- * @param value - Value to check
- * @param path - JSON path for error reporting (default: '$')
- * @param visited - WeakSet for circular reference detection
- * @throws Error if value is not JSON-safe
- */
-function assertJsonSafe(
-  value: unknown,
-  path: string = '$',
-  visited: WeakSet<object> = new WeakSet()
-): void {
-  if (value === null || value === undefined) {
-    return;
-  }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error(`Non-finite number ${value} at path "${path}"`);
-    }
-    return;
-  }
-
-  if (typeof value === 'string' || typeof value === 'boolean') {
-    return;
-  }
-
-  if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
-    throw new Error(`Unsupported type ${typeof value} at path "${path}"`);
-  }
-
-  if (typeof value === 'object') {
-    if (visited.has(value)) {
-      throw new Error(`Circular reference detected at path "${path}"`);
-    }
-    visited.add(value);
-
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        assertJsonSafe(value[i], `${path}[${i}]`, visited);
-      }
-      return;
-    }
-
-    // Plain object - check all properties
-    for (const [key, val] of Object.entries(value)) {
-      assertJsonSafe(val, `${path}.${key}`, visited);
-    }
-    return;
-  }
-
-  throw new Error(`Unrecognized value at path "${path}"`);
-}
+// Import from json/jsonSafe: DRY principle per 2026-08-20 architecture review.
+// One definition per shared helper.
+import { assertJsonSafe, JsonSafetyError } from '../json/jsonSafe';
 
 // ============================================================================
 // Validation Constants
@@ -132,19 +72,13 @@ export function validateEnvelopeOutput<P>(
   try {
     assertJsonSafe(parsed);
   } catch (err) {
-    // Extract the path from the error message if available
-    let fieldPath = '$';
-    if (err instanceof Error) {
-      // Error message format: "Non-finite number X at path "Y" or "Circular reference detected at path "Y""
-      const pathMatch = err.message.match(/at path "([^"]+)"/);
-      if (pathMatch && pathMatch[1]) {
-        fieldPath = pathMatch[1];
-      }
-    }
+    // Use structured error handling - no prose parsing
+    const fieldPath = err instanceof JsonSafetyError ? err.path : '$';
+    const message = err instanceof Error ? err.message : 'Non-finite numeric value encountered.';
 
     const failure: ValidationFailure = {
       code: 'non_finite_value',
-      message: err instanceof Error ? err.message : 'Non-finite numeric value encountered.',
+      message,
       fieldPath
     };
     return { ok: false, failure };
@@ -227,11 +161,11 @@ export function validateEnvelopeOutput<P>(
     explanation: typeof raw.explanation === 'string' ? raw.explanation : undefined
   };
 
-  // Build validated turn
-  const turn: AgentTurn<P> = {
-    envelope,
-    payload: validatedPayload
-  };
+  // Build validated turn - payload key omitted for non-proposal states
+  const turnBase: AgentTurn<P> = { envelope };
+  const turn: AgentTurn<P> = validatedState === 'proposal' && validatedPayload !== undefined
+    ? { ...turnBase, payload: validatedPayload }
+    : turnBase;
 
   return { ok: true, value: turn };
 }

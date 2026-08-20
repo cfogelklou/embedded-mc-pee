@@ -54,7 +54,9 @@ export const LIBRARY_VERSION = '0.1.0' as const;
  *
  * - `isJsonSafe(value)` — boolean test for JSON-serializability (no NaN,
  *   ±Infinity, functions, symbols, bigints, circular references).
- * - `assertJsonSafe(value)` — same check, throws with the offending JSON path.
+ * - `assertJsonSafe(value)` — same check, throws JsonSafetyError with the
+ *   offending JSON path and violation kind.
+ * - `JsonSafetyError` — structured error type with `path` and `kind` fields.
  * - `extractJson(rawText, options?)` — strict extraction of a single JSON
  *   object (bare or one fenced block) from model output; rejects trailing
  *   prose, multiple blocks, truncation, and oversized outputs.
@@ -63,7 +65,7 @@ export const LIBRARY_VERSION = '0.1.0' as const;
  * - `DEFAULT_MAX_RAW_OUTPUT_CHARS`, `DEFAULT_DIAGNOSTIC_SNIPPET_CHARS` —
  *   recommended limits, overridable via `ExtractJsonOptions` / parameter.
  */
-export { assertJsonSafe, isJsonSafe } from './json/jsonSafe';
+export { assertJsonSafe, isJsonSafe, JsonSafetyError } from './json/jsonSafe';
 
 export {
   DEFAULT_MAX_RAW_OUTPUT_CHARS,
@@ -120,8 +122,10 @@ export { validateEnvelopeOutput } from './envelope/validate';
  * degeneration from a malformed-but-honest response.
  *
  * - `detectDegeneration(input, options?)` — pure check returning a
- *   `DegenerationVerdict`: `max_tokens` (suggestive) and/or
- *   `ngram_repetition` (conclusive), or `config_error` for bad options.
+ *   `DetectDegenerationResult`: either a `DegenerationVerdict` with
+ *   `max_tokens` (suggestive) and/or `ngram_repetition` (conclusive), or a
+ *   typed `config_error` failure for invalid options — a harness
+ *   configuration bug, never model degeneration.
  * - `DEFAULT_DEGENERATION_WORD_THRESHOLD`,
  *   `DEFAULT_MAX_REPEAT_PERIOD_WORDS` — recommended defaults, overridable.
  */
@@ -132,9 +136,11 @@ export {
 } from './diagnostics/degeneration';
 export type {
   DegenerationCheckInput,
+  DegenerationConfigFailure,
   DegenerationSignature,
   DegenerationVerdict,
-  DetectDegenerationOptions
+  DetectDegenerationOptions,
+  DetectDegenerationResult
 } from './diagnostics/degeneration';
 
 /**
@@ -327,7 +333,8 @@ export type {
  * detection, transient backoff, and one repair retry with an error preamble.
  * `runTurn` NEVER rejects — every terminal condition is a typed
  * {@link HarnessResult} (`ok` turn, or `exhausted` / `budget` /
- * `all_fallbacks` with a safe fallback envelope from the host).
+ * `all_fallbacks` / `config` with a safe fallback envelope from the host;
+ * `config` is a hard harness-configuration failure — no retry, no fallback).
  *
  * All behavioral constants are tunables: exported `DEFAULT_*` recommended
  * defaults, caller overrides via {@link HarnessOptions}. Deterministic in
