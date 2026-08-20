@@ -91,6 +91,8 @@ class FakeLlmTransport implements LlmTransport {
   private responses: LlmResponse[] = [];
   private shouldReject = false;
   private rejectionDelay = 0;
+  /** Requests captured in call order (for asserting iteration prompts). */
+  readonly requests: LlmRequest[] = [];
 
   constructor(responses: LlmResponse[] = []) {
     this.responses = responses;
@@ -112,6 +114,7 @@ class FakeLlmTransport implements LlmTransport {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_req: LlmRequest, _opts: { timeoutMs: number }): Promise<LlmResponse> {
+    this.requests.push(_req);
     if (this.shouldReject) {
       if (this.rejectionDelay > 0) {
         await new Promise(resolve => setTimeout(resolve, this.rejectionDelay));
@@ -321,6 +324,13 @@ describe('Agent Harness Executor', () => {
       if (turnResult.ok) {
         expect(turnResult.trace.entries.some(e => e.kind === 'tool_call')).toBe(true);
       }
+
+      // Regression: iteration-2 prompt must include the tool CALL ARGUMENTS —
+      // model calls are stateless, so feedback without the arguments that
+      // produced it is uncorrelatable (found via live guess-number example).
+      expect(transport.requests.length).toBe(2);
+      expect(transport.requests[1].promptText).toContain('PREVIOUS TOOL RESULTS:');
+      expect(transport.requests[1].promptText).toContain('"arg":"test"');
     });
   });
 

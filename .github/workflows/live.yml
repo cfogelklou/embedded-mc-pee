@@ -22,23 +22,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # NOTE: Examples land in a later work package (WP-X).
-      # The workflow will fail-fast gracefully until then:
-      # - This guard step exits 0 with a notice if examples/ does not exist
-      # - The workflow remains green before WP-X lands
-      # Once examples exist, remove the guard and continue-on-error becomes false
-      - name: Guard - examples not yet implemented
-        id: examples-guard
-        run: |
-          if [ ! -d "examples" ]; then
-            echo "✓ examples/ not yet implemented (WP-X) — workflow passes preemptively"
-            echo "examples_exist=false" >> $GITHUB_OUTPUT
-          else
-            echo "✓ examples/ exists — running live tests"
-            echo "examples_exist=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Test examples (if available)
-        if: steps.examples-guard.outputs.examples_exist == 'true'
-        continue-on-error: false
+      - name: Test examples
         run: npm run test:examples
+        # Skip (not fail) when GEMINI_API_KEY secret is absent
+        continue-on-error: false
+        if: env.GEMINI_API_KEY != ''

@@ -52,9 +52,23 @@ import { createHarness, createContract } from 'embedded-mc-pee';
 import { geminiTransport } from 'embedded-mc-pee/gemini';
 ```
 
+## Examples
+
+Run worked examples (live Gemini, requires `GEMINI_API_KEY`):
+
+```bash
+GEMINI_API_KEY=your-key npm run test:examples
+```
+
+- `pig-latin` — canary test: single-turn text transformation
+- `doctor-scheduling` — showcase: state input, constraints, conflict handling
+- `guess-number` — tool loop: iteration budget, tool protocol, trace recording
+
+See `examples/README.md` for details.
+
 ## Minimal usage sketch
 
-**Note:** The API surfaces below land in coming work packages. Types shown are indicative.
+**Note:** The API surfaces below are available now. See `examples/` for runnable demonstrations.
 
 ```typescript
 import { createHarness, createContract } from 'embedded-mc-pee';

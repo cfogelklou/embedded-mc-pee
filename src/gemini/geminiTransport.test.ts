@@ -807,10 +807,14 @@ describe('createGeminiTransport', () => {
         { timeoutMs: 500 } // Short timeout
       );
 
+      // Attach the rejection handler BEFORE advancing timers, so the rejection
+      // is never momentarily unhandled when the timer fires
+      const rejection = expect(timeoutPromise).rejects.toThrow(/timeout/);
+
       // Advance time past the timeout
       await vi.advanceTimersByTimeAsync(500);
 
-      await expect(timeoutPromise).rejects.toThrow(/timeout/);
+      await rejection;
 
       vi.useRealTimers();
     });
@@ -836,15 +840,13 @@ describe('createGeminiTransport', () => {
         { timeoutMs: 100 }
       );
 
+      // Attach the rejection handler BEFORE advancing timers, so the rejection
+      // is never momentarily unhandled when the timer fires
+      const rejection = expect(timeoutPromise).rejects.toThrow(/timeout/);
+
       await vi.advanceTimersByTimeAsync(100);
 
-      try {
-        await timeoutPromise;
-        expect(true).toBe(false); // Should not reach here
-      } catch (err) {
-        expect(err).toBeInstanceOf(Error);
-        expect((err as Error).message.toLowerCase()).toContain('timeout');
-      }
+      await rejection;
 
       vi.useRealTimers();
     });

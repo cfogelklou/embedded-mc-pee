@@ -209,11 +209,9 @@ export type { DebugLevel, DebugLogger, DebugSink } from './debug/debug';
  *
  * Field-by-field MCP mapping: `docs/mcp-contract-mapping.md`.
  */
-export {
-  JsonSchemaTypeName,
-  validateToolArgs
-} from './tool/toolContract';
+export { validateToolArgs } from './tool/toolContract';
 export type {
+  JsonSchemaTypeName,
   JsonSchema,
   JsonSchemaObject,
   ToolAnnotations,
@@ -406,11 +404,14 @@ export type {
 } from './record/recordReplay';
 
 /**
- * Planned exports — NOT YET AVAILABLE. Do not import; these subpaths and
- * symbols are scheduled for later work packages and are listed here to make
- * the roadmap visible from the front door.
+ * Worked examples — runnable demonstrations under `examples/`.
  *
- * - Worked examples (pig-latin, doctor-scheduling, guess-number) — runnable
- *   demonstrations doubling as the live-Gemini CI suite, published under
- *   `examples/`.
+ * Four examples demonstrate live-Gemini integration:
+ * - `examples/pig-latin` — canary test, single-turn transformation
+ * - `examples/doctor-scheduling` — showcase with state, constraints, and conflicts
+ * - `examples/guess-number` — tool loop with iteration budget and trace recording
+ * - `examples/shape-agent` — multi-turn conversation: user feedback across
+ *   runTurn calls, geometric invariants, spatial non-overlap
+ *
+ * Run via `npm run test:examples` (requires GEMINI_API_KEY).
  */

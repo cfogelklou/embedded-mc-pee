@@ -229,7 +229,7 @@ interface HarnessState {
   /** Transient retry counts per model */
   transientRetryCounts: Map<string, number>;
   /** Tool results accumulated so far (for next iteration's prompt) */
-  toolResults: Array<{ name: string; result: ToolResult }>;
+  toolResults: Array<{ name: string; args: unknown; result: ToolResult }>;
 }
 
 /**
@@ -433,7 +433,9 @@ export function createHarness<P>(
             .map(tr => {
               const isError = tr.result.isError ?? false;
               const content = tr.result.structuredContent ?? tr.result.text ?? '';
-              return `Tool: ${tr.name}\nStatus: ${isError ? 'ERROR' : 'OK'}\nResult: ${JSON.stringify(content)}`;
+              // Include the call arguments: model calls are stateless, so
+              // without them the model cannot correlate results with calls.
+              return `Tool: ${tr.name}\nArguments: ${JSON.stringify(tr.args ?? null)}\nStatus: ${isError ? 'ERROR' : 'OK'}\nResult: ${JSON.stringify(content)}`;
             })
             .join('\n\n');
           prompt = `${prompt}\n\nPREVIOUS TOOL RESULTS:\n${toolResultsText}`;
@@ -695,6 +697,7 @@ export function createHarness<P>(
               // Unknown tool -> synthesize error result
               state.toolResults.push({
                 name: toolName,
+                args: toolArgs,
                 result: { isError: true, text: `Unknown tool: ${toolName}` }
               });
               state.remainingToolCalls--;
@@ -710,6 +713,7 @@ export function createHarness<P>(
               const violationsText = argsValidation.violations.map(v => `[${v.path}] ${v.message}`).join(', ');
               state.toolResults.push({
                 name: toolName,
+                args: toolArgs,
                 result: { isError: true, text: `Invalid arguments: ${violationsText}` }
               });
               state.remainingToolCalls--;
@@ -744,7 +748,7 @@ export function createHarness<P>(
                 new Promise<ToolResult>((_, reject) => resolved.sleep(resolved.perModelTimeoutMs).then(() => reject(new Error('Tool handler timed out'))))
               ]);
 
-              state.toolResults.push({ name: toolName, result: toolResult });
+              state.toolResults.push({ name: toolName, args: toolArgs, result: toolResult });
               state.remainingToolCalls--;
               state.remainingIterations--;
               addTrace({ kind: 'tool_call', name: toolName, ok: !(toolResult.isError ?? false), attempt: iteration });
@@ -756,6 +760,7 @@ export function createHarness<P>(
               const errorText = err instanceof Error ? err.message : 'Unknown error';
               state.toolResults.push({
                 name: toolName,
+                args: toolArgs,
                 result: { isError: true, text: `Tool execution failed: ${errorText}` }
               });
               state.remainingToolCalls--;

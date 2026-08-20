@@ -6,7 +6,7 @@ export default [
   },
   ...tseslint.configs.strict.map((config) => ({
     ...config,
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'examples/**/*.ts'],
     rules: {
       ...config.rules,
       '@typescript-eslint/no-explicit-any': 'error',
