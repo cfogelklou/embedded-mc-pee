@@ -277,13 +277,91 @@ export {
 export type { ContractLintFinding, LintThresholds } from './contract/lint';
 
 /**
+ * LLM transport contract (vendor-neutral).
+ *
+ * The harness talks to models ONLY through {@link LlmTransport} — provider
+ * SDKs live behind thin adapters (see the planned `./gemini` subpath), so the
+ * core package stays dependency-free and every transport is record/replayable.
+ * The transport receives BOTH belt-and-suspenders artifacts in every
+ * {@link LlmRequest} (`toolDeclarations` + the prompt-rendered contract inside
+ * `promptText`) and returns RAW signals ({@link LlmResponse} with `rawText`
+ * and optional `toolCall`); the harness — never the transport — applies
+ * candidate normalization and precedence.
+ *
+ * - `LlmTransport.complete(req, {timeoutMs})` — may reject; the harness
+ *   catches and classifies transient vs permanent.
+ * - `LlmResponse` — raw text + optional tool call + finishReason + usage.
+ * - `ToolBinding` — contract + handler pair the harness registers.
+ * - `TurnTrace` / `TraceEntry` — full audit trail of a turn (model calls,
+ *   tool calls, repairs, fallbacks, decisions), timestamps from injected
+ *   clock.
+ * - `HarnessTelemetryEvent` — observability stream via
+ *   `HarnessOptions.onTelemetry`.
+ * - `IterationContext` — per-iteration budget facts passed to
+ *   `onIterationContext` for dynamic prompt lines.
+ * - `HarnessResult` / `AgentHarness` / `HarnessTurnInput` — the turn-level
+ *   API surface.
+ */
+export type {
+  AgentHarness,
+  FailureContext,
+  HarnessResult,
+  HarnessTelemetryEvent,
+  HarnessTurnInput,
+  IterationContext,
+  LlmRequest,
+  LlmResponse,
+  LlmTransport,
+  ToolBinding,
+  TraceEntry,
+  TurnTrace
+} from './transport/types';
+
+/**
+ * Harness executor — the policy loop that drives a transport to a validated
+ * envelope.
+ *
+ * `createHarness(options, contract)` builds an {@link AgentHarness} that runs
+ * one turn: model fallback chain, iteration + tool budgets, tool-call
+ * protocol (args validated BEFORE handler, in-band errors), candidate
+ * normalization (tool call wins, ambiguity telemetry), degeneration
+ * detection, transient backoff, and one repair retry with an error preamble.
+ * `runTurn` NEVER rejects — every terminal condition is a typed
+ * {@link HarnessResult} (`ok` turn, or `exhausted` / `budget` /
+ * `all_fallbacks` with a safe fallback envelope from the host).
+ *
+ * All behavioral constants are tunables: exported `DEFAULT_*` recommended
+ * defaults, caller overrides via {@link HarnessOptions}. Deterministic in
+ * tests via injected `now` / `idFactory` / `sleep`.
+ */
+export {
+  DEFAULT_MAX_ITERATIONS,
+  DEFAULT_PER_MODEL_TIMEOUT_MS,
+  DEFAULT_TOTAL_BUDGET_MS,
+  DEFAULT_MAX_REPAIRS,
+  DEFAULT_MAX_DEGENERATIONS_BEFORE_ABORT,
+  DEFAULT_TRANSIENT_BACKOFF_MS,
+  DEFAULT_MAX_TRANSIENT_RETRIES_PER_MODEL,
+  DEFAULT_MAX_TOOL_CALLS_PER_ITERATION,
+  DEFAULT_MAX_TOTAL_TOOL_CALLS,
+  DEFAULT_TEMPERATURE,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_THINKING_LEVEL,
+  DEFAULT_MIN_BUDGET_FOR_REPAIR_MS,
+  createHarness
+} from './policy/executor';
+export type {
+  ConfigFailure,
+  ConfigFailureCode,
+  CreateHarnessResult,
+  HarnessOptions
+} from './policy/executor';
+
+/**
  * Planned exports — NOT YET AVAILABLE. Do not import; these subpaths and
  * symbols are scheduled for later work packages and are listed here to make
  * the roadmap visible from the front door.
  *
- * - `AgentHarness` executor — the tool-calling loop that drives a transport,
- *   validates each turn against the envelope, and returns the final
- *   `AgentTurn`.
  * - Record/replay transports — capture real model turns and replay them in
  *   tests without network access.
  * - Gemini transport — a concrete provider adapter, published behind the

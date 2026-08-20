@@ -11,11 +11,30 @@ Single source of truth for AI-agent instructions. This is an open-source TypeScr
 - **Typecheck**: `npm run typecheck` (`tsc --noEmit`)
 - **Examples tests**: `npm run test:examples` (live Gemini, requires GEMINI_API_KEY)
 
+## Communication
+
+– If you cannot verify something directly, say:
+  – “I cannot verify this.”
+
+– Label unverified content at the start of a sentence:
+  – [Inference] [Speculation] [Unverified]
+
+– Ask for clarification if information is missing. Do not guess or fill gaps.
+
+– If any part is unverified, label the entire response.
+
+– Do not paraphrase or reinterpret my input unless I request it.
+– If you use these words, label the claim unless sourced:
+  – Prevent, Guarantee, Will never, Fixes, Eliminates, Ensures that
+
+– For LLM-behavior claims (including yourself), include:
+  – [Inference] or [Unverified], with a note that it’s based on observed patterns
+
 ## Non-negotiable rules
 
 1. **Fix all `tsc` and lint errors before finishing a task** — including pre-existing ones. Mechanical cleanup may be delegated to a cheaper subagent.
 
-2. **Types are contracts**: Every exported function declares parameter **and** return types explicitly. No inferred returns on exported symbols. Shared shapes (envelope types, tool schemas, validation contracts) live in one place and are imported everywhere. Never duplicate type definitions across files.
+2. **Types are contracts**: Every exported function declares parameter **and** return types explicitly. No inferred returns on exported symbols. Shared shapes (envelope types, tool schemas, validation contracts) live in one place and are imported everywhere. Never duplicate type definitions across files. **No inline `import('...')` type references** — all imports are declared at the top of the file (`import type { X } from ...`); mid-code lazy imports hide dependencies and are banned (enforced by eslint `no-restricted-syntax` on `TSImportType`).
 
 3. **No magic strings crossing boundaries**: Any literal in more than one file, or that library and host must agree on, is a named export. Single-use display text may stay inline.
 
@@ -40,3 +59,5 @@ See [docs/guidelines-typescript.md](docs/guidelines-typescript.md) for complete 
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for module map, data flow, and determinism principles.
+
+
