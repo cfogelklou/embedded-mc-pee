@@ -61,7 +61,7 @@ jobs:
           cd "$CONSUMER_DIR"
           npm init -y
           npm install "$GITHUB_WORKSPACE"/*.tgz
-          node --input=- <<'EOF'
+          node --input-type=module - <<'EOF'
           (async () => {
             const pkg = await import('embedded-mc-pee');
             console.log('✓ embedded-mc-pee resolved successfully');
