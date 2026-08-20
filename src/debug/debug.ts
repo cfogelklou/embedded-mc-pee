@@ -4,17 +4,14 @@
  * Zero-overhead, runtime-toggleable debug logging and defensive invariant
  * assertions shared across environments.
  *
+ * Platform-agnostic: The library never touches `window`, `localStorage`,
+ * `process`, or any environment globals. Debug mode starts DISABLED by
+ * default. The host application enables it by calling `setDebug(true)` after
+ * reading its own environment/config (e.g. Firebase Functions reads env vars;
+ * a browser PWA reads localStorage).
+ *
  * Ported from courtpuzzle/src/common/debug.ts.
  */
-
-// Type declarations for browser globals (this library targets Node but supports browser environments)
-declare const window: {
-  localStorage?: {
-    getItem(key: string): string | null;
-    setItem(key: string, value: string): void;
-    removeItem(key: string): void;
-  };
-} | undefined;
 
 /**
  * Custom Error class for assertion failures.
@@ -40,39 +37,8 @@ export interface DebugLogger {
   readonly logObj: (label: string, obj: unknown) => void;
 }
 
-// Cross-runtime environment detection for initial debug state
-function detectInitialDebugState(): boolean {
-  const g = typeof globalThis !== 'undefined' ? (globalThis as Record<string, unknown>) : {};
-
-  // Browser check via window.localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      const storage = window.localStorage;
-      if (storage && storage.getItem('DEBUG') === 'true') {
-        return true;
-      }
-    } catch {
-      // Documented best-effort fallback: localStorage may be restricted in sandbox/iframe
-    }
-  }
-
-  // Node.js / Cloud Functions environment check via global process
-  const proc = g.process as { env?: Record<string, string | undefined> } | undefined;
-  if (proc && proc.env) {
-    const debugEnv = proc.env.DEBUG;
-    if (debugEnv === 'true' || debugEnv === '1') {
-      return true;
-    }
-    const nodeEnv = proc.env.NODE_ENV;
-    if (nodeEnv === 'development' || nodeEnv === 'test') {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-let _isDebug: boolean = detectInitialDebugState();
+// Debug mode starts DISABLED by default. The host enables it via setDebug(true).
+let _isDebug: boolean = false;
 
 /**
  * Returns whether debug logging is currently active.
@@ -149,20 +115,13 @@ export function getDebugSink(): DebugSink {
 
 /**
  * Dynamically toggles debug logging at runtime.
+ *
+ * The host application is responsible for persisting debug state if desired
+ * (e.g. to localStorage in a browser PWA, or to env config in backend).
+ * This library only maintains in-memory state for the current process.
  */
 export function setDebug(enabled: boolean): void {
   _isDebug = enabled;
-  if (typeof window !== 'undefined') {
-    try {
-      if (enabled) {
-        window.localStorage?.setItem('DEBUG', 'true');
-      } else {
-        window.localStorage?.removeItem('DEBUG');
-      }
-    } catch {
-      // Documented best-effort fallback: localStorage may be disabled
-    }
-  }
 }
 
 /**

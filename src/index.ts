@@ -164,9 +164,10 @@ export { isTransientProviderError } from './policy/transientErrors';
  *   logging library (e.g. Firebase Functions `logger`) instead of raw
  *   console; `null` restores `DEFAULT_DEBUG_SINK`. Process-global; install
  *   once at host startup. Zero overhead when debug is disabled.
- * - `isDebug()` / `setDebug(enabled)` — read/toggle debug mode; initially
- *   on when `DEBUG=true/1` env var, browser `localStorage.DEBUG`, or
- *   development/test `NODE_ENV`.
+ * - `isDebug()` / `setDebug(enabled)` — read/toggle debug mode. Starts
+ *   DISABLED: this module never touches `process`, `window`, or
+ *   `localStorage` — the host bootstraps debug mode (a Functions host reads
+ *   its own env/config, a PWA its own storage) and calls `setDebug(true)`.
  * - `assert(condition, message?)` — internal-invariant assertion; throws
  *   `AssertionError` in debug mode, logs in production. For untrusted
  *   external input (LLM output, API payloads) use the envelope validators

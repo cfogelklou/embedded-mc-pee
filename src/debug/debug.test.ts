@@ -99,6 +99,13 @@ describe('debug', () => {
   });
 
   describe('dbg and isDebug', () => {
+    it('starts DISABLED even in test environment (proves no environment sniffing)', () => {
+      // In vitest, NODE_ENV is typically 'test'. If this module were still
+      // sniffing process.env.NODE_ENV, it would auto-enable. This test proves
+      // we removed that behavior.
+      expect(isDebug()).toBe(false);
+    });
+
     it('reflects setDebug state', () => {
       expect(isDebug()).toBe(false);
       setDebug(true);
