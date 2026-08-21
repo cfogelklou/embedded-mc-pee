@@ -244,6 +244,41 @@ describe('createGeminiTransport', () => {
       ]);
     });
 
+    it('prepends inlineData part for vision inputs', async () => {
+      const mockClient = createMockClient();
+      const result = createGeminiTransport({
+        client: mockClient as unknown as Parameters<typeof createGeminiTransport>[0]['client']
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      await result.transport.complete(
+        {
+          model: 'gemini-test',
+          systemInstruction: 'You transcribe documents.',
+          promptText: 'Transcribe this document.',
+          toolDeclarations: [],
+          inlineData: { mimeType: 'application/pdf', data: 'aGVsbG8=' }
+        },
+        { timeoutMs: 10_000 }
+      );
+
+      const generateContentSpy = mockClient.models.generateContent as ReturnType<typeof vi.fn>;
+      const capturedCall = generateContentSpy.mock.calls[0]?.[0] as {
+        contents: unknown;
+      } | undefined;
+      expect(capturedCall?.contents).toEqual([
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType: 'application/pdf', data: 'aGVsbG8=' } },
+            { text: 'Transcribe this document.' }
+          ]
+        }
+      ]);
+    });
+
     it('includes functionDeclarations when tools are present', async () => {
       const mockClient = createMockClient();
       const result = createGeminiTransport({

@@ -317,11 +317,17 @@ export function createGeminiTransport(
         config.thinkingConfig = { thinkingLevel: req.thinkingLevel as ThinkingLevel };
       }
 
-      // Build contents
+      // Build contents. Vision inputs (inlineData) come first, followed by
+      // the prompt text; text-only requests are unchanged.
+      const parts: Part[] = [];
+      if (req.inlineData !== undefined) {
+        parts.push({ inlineData: req.inlineData });
+      }
+      parts.push({ text: req.promptText });
       const contents: Content[] = [
         {
           role: 'user',
-          parts: [{ text: req.promptText }]
+          parts
         }
       ];
 
