@@ -42,7 +42,7 @@
  *
  * Semver-major bumps indicate breaking API changes. Semver-minor/patch bumps are for new features and bug fixes.
  */
-export const LIBRARY_VERSION = '0.2.0' as const;
+export const LIBRARY_VERSION = '0.2.1' as const;
 
 /**
  * JSON safety & extraction.

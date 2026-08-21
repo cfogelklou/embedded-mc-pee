@@ -368,9 +368,9 @@ export function createHarness<P>(
   const resolved: Required<
     Omit<
       HarnessOptions,
-      'tools' | 'onTelemetry' | 'onIterationContext' | 'onFallbackExhausted'
+      'tools' | 'onTelemetry' | 'onIterationContext' | 'onFallbackExhausted' | 'thinkingLevel'
     >
-  > = {
+  > & { thinkingLevel?: 'low' | 'minimal' } = {
     transport: options.transport,
     models: options.models,
     maxIterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
@@ -385,7 +385,10 @@ export function createHarness<P>(
     maxTransientRetriesPerModel: options.maxTransientRetriesPerModel ?? DEFAULT_MAX_TRANSIENT_RETRIES_PER_MODEL,
     temperature: options.temperature ?? DEFAULT_TEMPERATURE,
     maxOutputTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-    thinkingLevel: options.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
+    // Opt-in: the Gemini API rejects thinkingLevel for several models
+    // (HTTP 400 "Thinking level is not supported for this model"), so the
+    // transport must omit it unless the host explicitly configures it.
+    thinkingLevel: options.thinkingLevel,
     now: options.now ?? (() => Date.now()),
     idFactory: options.idFactory ?? (() => `harness_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`),
     sleep: options.sleep ?? ((ms: number) => new Promise(resolve => setTimeout(resolve, ms)))
