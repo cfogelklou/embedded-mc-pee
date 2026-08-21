@@ -268,6 +268,73 @@ describe('inputHashOf', () => {
       expect(result.failure.reason).toContain('Failed to canonicalize');
     }
   });
+
+  // Regression test for bug #2: inlineData missing from replay hash
+  it('should produce different hashes for different inlineData content', async () => {
+    const req1: LlmRequest = {
+      model: 'gemini-2.0-flash',
+      systemInstruction: 'You are a helpful assistant.',
+      promptText: 'What is in this image?',
+      toolDeclarations: [],
+      inlineData: {
+        mimeType: 'image/png',
+        data: 'base64encodedimage1'
+      }
+    };
+
+    const req2: LlmRequest = {
+      model: 'gemini-2.0-flash',
+      systemInstruction: 'You are a helpful assistant.',
+      promptText: 'What is in this image?',
+      toolDeclarations: [],
+      inlineData: {
+        mimeType: 'image/png',
+        data: 'base64encodedimage2'
+      }
+    };
+
+    const hash1 = await inputHashOf(req1);
+    const hash2 = await inputHashOf(req2);
+
+    expect(hash1.ok).toBe(true);
+    expect(hash2.ok).toBe(true);
+    if (hash1.ok && hash2.ok) {
+      // Different inlineData should produce different hashes
+      expect(hash1.value).not.toBe(hash2.value);
+    }
+  });
+
+  it('should produce same hash for identical inlineData', async () => {
+    const baseInlineData = {
+      mimeType: 'image/jpeg',
+      data: 'abc123def456'
+    };
+
+    const req1: LlmRequest = {
+      model: 'gemini-2.0-flash',
+      systemInstruction: 'You are a helpful assistant.',
+      promptText: 'Describe this image',
+      toolDeclarations: [],
+      inlineData: baseInlineData
+    };
+
+    const req2: LlmRequest = {
+      model: 'gemini-2.0-flash',
+      systemInstruction: 'You are a helpful assistant.',
+      promptText: 'Describe this image',
+      toolDeclarations: [],
+      inlineData: { ...baseInlineData }
+    };
+
+    const hash1 = await inputHashOf(req1);
+    const hash2 = await inputHashOf(req2);
+
+    expect(hash1.ok).toBe(true);
+    expect(hash2.ok).toBe(true);
+    if (hash1.ok && hash2.ok) {
+      expect(hash1.value).toBe(hash2.value);
+    }
+  });
 });
 
 describe('DEFAULT_REPLAY_RECORDING_VERSION', () => {

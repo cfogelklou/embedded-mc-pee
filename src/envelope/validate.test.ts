@@ -598,4 +598,111 @@ describe('validateEnvelopeOutput', () => {
       }
     });
   });
+
+  // Regression test for bug #1: Manifest states not enforced
+  describe('Manifest State Enforcement', () => {
+    it('should accept state when manifest allows all states (default)', () => {
+      // When no manifest restriction, all states are valid
+      const testAllStates = ['proposal', 'question', 'analysis', 'infeasible'] as const;
+
+      for (const state of testAllStates) {
+        const input = state === 'proposal'
+          ? { state, payload: 'test' }
+          : state === 'question'
+          ? { state, questionText: 'Question?' }
+          : { state, explanation: 'Explanation' };
+
+        const result = validateEnvelopeOutput(input, createMockSuccessValidator());
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.envelope.state).toBe(state);
+        }
+      }
+    });
+
+    it('should reject state not in manifest.envelope.states', () => {
+      // Simulating a manifest that only allows 'proposal' state
+      const mockManifest = {
+        envelope: { states: ['proposal' as const] },
+        payload: { type: 'object' as const, properties: {} }
+      };
+
+      const disallowedStates = ['question', 'analysis', 'infeasible'] as const;
+
+      for (const state of disallowedStates) {
+        const input = state === 'question'
+          ? { state, questionText: 'Why?' }
+          : { state, explanation: 'Cannot do it' };
+
+        const result = validateEnvelopeOutput(input, createMockSuccessValidator(), mockManifest);
+
+        // Should reject disallowed states after fix
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.failure.code).toBe('envelope_state_invalid');
+          expect(result.failure.message).toContain('not allowed by manifest');
+        }
+      }
+    });
+
+    it('should accept proposal state when manifest allows only proposal', () => {
+      const input = { state: 'proposal' as const, payload: 'test' };
+      const mockManifest = {
+        envelope: { states: ['proposal' as const] },
+        payload: { type: 'object' as const, properties: {} }
+      };
+
+      const result = validateEnvelopeOutput(input, createMockSuccessValidator(), mockManifest);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.envelope.state).toBe('proposal');
+      }
+    });
+
+    it('should accept all states when manifest has no restriction', () => {
+      const unrestrictedManifest = {
+        envelope: {}, // No states array means all states allowed
+        payload: { type: 'object' as const, properties: {} }
+      };
+
+      const testAllStates = ['proposal', 'question', 'analysis', 'infeasible'] as const;
+
+      for (const state of testAllStates) {
+        const input = state === 'proposal'
+          ? { state, payload: 'test' }
+          : state === 'question'
+          ? { state, questionText: 'Question?' }
+          : { state, explanation: 'Explanation' };
+
+        const result = validateEnvelopeOutput(input, createMockSuccessValidator(), unrestrictedManifest);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('should allow multiple states when manifest declares them', () => {
+      const multiStateManifest = {
+        envelope: { states: ['proposal' as const, 'question' as const] },
+        payload: { type: 'object' as const, properties: {} }
+      };
+
+      // Should accept proposal
+      const proposalInput = { state: 'proposal' as const, payload: 'test' };
+      const proposalResult = validateEnvelopeOutput(proposalInput, createMockSuccessValidator(), multiStateManifest);
+      expect(proposalResult.ok).toBe(true);
+
+      // Should accept question
+      const questionInput = { state: 'question' as const, questionText: 'Why?' };
+      const questionResult = validateEnvelopeOutput(questionInput, createMockSuccessValidator(), multiStateManifest);
+      expect(questionResult.ok).toBe(true);
+
+      // Should reject analysis (not in manifest)
+      const analysisInput = { state: 'analysis' as const, explanation: 'Analysis here' };
+      const analysisResult = validateEnvelopeOutput(analysisInput, createMockSuccessValidator(), multiStateManifest);
+      expect(analysisResult.ok).toBe(false);
+      if (!analysisResult.ok) {
+        expect(analysisResult.failure.code).toBe('envelope_state_invalid');
+      }
+    });
+  });
 });

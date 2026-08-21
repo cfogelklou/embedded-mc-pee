@@ -2,7 +2,8 @@
  * Envelope validation logic.
  *
  * Provides deterministic validation for agent envelopes with JSON-safety checks,
- * state enum validation, conditional field presence, and payload validation.
+ * state enum validation, conditional field presence, payload validation, and
+ * manifest state enforcement.
  */
 
 import type {
@@ -15,6 +16,7 @@ import type {
 } from './envelope';
 
 import { ENVELOPE_STATES } from './envelope';
+import type { ContractManifest } from '../contract/manifest';
 
 // Import from json/jsonSafe: DRY principle per 2026-08-20 architecture review.
 // One definition per shared helper.
@@ -40,23 +42,28 @@ const VALID_STATES: readonly EnvelopeState[] = ENVELOPE_STATES;
  * 1. Input must be a plain object (not null, not array)
  * 2. All values must be JSON-safe (no NaN, Infinity, circular refs, etc.)
  * 3. State field must be present and match valid enum values
- * 4. Conditional fields required per state:
+ * 4. Manifest state enforcement (when manifest provided):
+ *    - If manifest.envelope.states is declared, state must be in that array
+ *    - Otherwise, all four states are valid (default behavior)
+ * 5. Conditional fields required per state:
  *    - state === 'question': questionText required
  *    - state === 'analysis' | 'infeasible': explanation required
- * 5. Payload presence:
+ * 6. Payload presence:
  *    - state === 'proposal': payload required (payload_missing if absent)
  *    - state !== 'proposal': payload forbidden (payload_unexpected if present)
- * 6. When payload present, run payloadValidator and propagate any failure
+ * 7. When payload present, run payloadValidator and propagate any failure
  *
  * @param parsed - Unknown parsed value to validate
  * @param payloadValidator - Host-provided payload validator for domain-specific checks
+ * @param manifest - Optional contract manifest for state enforcement
  * @returns Validated turn or structured validation failure
  *
  * @template P - Payload type (only present when state === 'proposal')
  */
 export function validateEnvelopeOutput<P>(
   parsed: unknown,
-  payloadValidator: EnvelopePayloadValidator<P>
+  payloadValidator: EnvelopePayloadValidator<P>,
+  manifest?: ContractManifest
 ): TurnResult<P> {
   // Step 1: Input must be a plain object
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -99,7 +106,20 @@ export function validateEnvelopeOutput<P>(
 
   const validatedState = state as EnvelopeState;
 
-  // Step 4: Validate conditional fields per state
+  // Step 4: Validate manifest state enforcement (Bug #1 fix)
+  if (manifest && manifest.envelope.states) {
+    const allowedStates = manifest.envelope.states;
+    if (!allowedStates.includes(validatedState)) {
+      const failure: ValidationFailure = {
+        code: 'envelope_state_invalid',
+        message: `State "${validatedState}" is not allowed by manifest. Allowed states: ${allowedStates.join(', ')}.`,
+        fieldPath: '$.state'
+      };
+      return { ok: false, failure };
+    }
+  }
+
+  // Step 5: Validate conditional fields per state
   if (validatedState === 'question' && typeof raw.questionText !== 'string') {
     const failure: ValidationFailure = {
       code: 'missing_required_field',
@@ -119,7 +139,7 @@ export function validateEnvelopeOutput<P>(
     return { ok: false, failure };
   }
 
-  // Step 5: Validate payload presence per state
+  // Step 6: Validate payload presence per state
   const hasPayload = 'payload' in raw && raw.payload !== undefined && raw.payload !== null;
 
   if (validatedState === 'proposal') {
@@ -143,7 +163,7 @@ export function validateEnvelopeOutput<P>(
     }
   }
 
-  // Step 6: Validate payload with host-provided validator (if present)
+  // Step 7: Validate payload with host-provided validator (if present)
   let validatedPayload: P | undefined;
   if (hasPayload && validatedState === 'proposal') {
     const payloadResult = payloadValidator(raw.payload);

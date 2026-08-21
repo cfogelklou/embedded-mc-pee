@@ -78,7 +78,8 @@ export type ValidationFailureCode =
   | 'missing_required_field'
   | 'invalid_enum'
   | 'payload_missing'
-  | 'payload_unexpected';
+  | 'payload_unexpected'
+  | 'envelope_state_invalid';
 
 /**
  * Structured validation failure with context.
