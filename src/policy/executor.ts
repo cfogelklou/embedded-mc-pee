@@ -542,7 +542,7 @@ Please fix the error and return ONLY a valid JSON object following the output co
             return { ok: false };
           }
 
-          const repairValidation = validateEnvelopeOutput(repairCandidate.extractedJson, contract.validateHostPayload);
+          const repairValidation = validateEnvelopeOutput(repairCandidate.extractedJson, contract.validateHostPayload, contract.manifest);
           if (!repairValidation.ok) {
             addTrace({ kind: 'repair', attempt: iteration, outcome: 'failed_validation', detail: repairValidation.failure.code });
             return { ok: false };
@@ -668,7 +668,8 @@ Please fix the error and return ONLY a valid JSON object following the output co
           }
 
           const latencyMs = resolved.now() - callStart;
-          const snippet = diagnosticSnippet(resp.rawText);
+          // Bug #3 fix: Redact snippet to prevent leaking user content in telemetry
+          const snippet = diagnosticSnippet(resp.rawText, { redactSnippet: true });
           emit({
             type: 'model_call',
             correlationId,
@@ -895,7 +896,7 @@ Please fix the error and return ONLY a valid JSON object following the output co
           }
 
           // Validate envelope
-          const validation = validateEnvelopeOutput(payload, contract.validateHostPayload);
+          const validation = validateEnvelopeOutput(payload, contract.validateHostPayload, contract.manifest);
           if (!validation.ok) {
             // Validation failed -> repair
             if (state.remainingRepairs > 0) {

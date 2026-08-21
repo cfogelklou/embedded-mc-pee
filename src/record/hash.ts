@@ -190,6 +190,11 @@ export async function inputHashOf(
     hashInput.thinkingLevel = req.thinkingLevel;
   }
 
+  // Include inlineData in hash for vision inputs (Bug #2 fix)
+  if (req.inlineData !== undefined) {
+    hashInput.inlineData = req.inlineData;
+  }
+
   const canonicalResult = canonicalJsonStringify(hashInput);
   if (!canonicalResult.ok) {
     return {

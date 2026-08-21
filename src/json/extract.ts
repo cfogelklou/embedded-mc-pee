@@ -41,14 +41,49 @@ export type JsonExtractionResult =
   | { ok: false; failure: { code: 'malformed_json' | 'oversized_output' | 'schema_invalid' | 'config_error'; safeMessage: string } };
 
 /**
+ * Configuration options for {@link diagnosticSnippet}.
+ */
+export interface DiagnosticSnippetOptions {
+  /**
+   * Character count per side for the snippet.
+   * Defaults to DEFAULT_DIAGNOSTIC_SNIPPET_CHARS (200).
+   */
+  readonly snippetChars?: number;
+
+  /**
+   * When true, redacts the snippet to prevent leaking user content in telemetry.
+   * Returns a placeholder instead of actual text. Defaults to false.
+   *
+   * Bug #3 fix: Prevents telemetry from echoing sensitive user data.
+   */
+  readonly redactSnippet?: boolean;
+}
+
+/**
  * Bounded head+tail snippet of a failed raw model output, for log-based
  * diagnosis of repetition loops and truncation without echoing user text.
  *
  * @param rawText - The raw model output text
- * @param snippetChars - Character count per side for the snippet (default: DEFAULT_DIAGNOSTIC_SNIPPET_CHARS)
- * @returns Head-only or head+tail snippet string
+ * @param options - Configuration options (snippetChars, redactSnippet)
+ * @returns Head-only or head+tail snippet string, or placeholder if redacted
  */
-export function diagnosticSnippet(rawText: string, snippetChars: number = DEFAULT_DIAGNOSTIC_SNIPPET_CHARS): string {
+export function diagnosticSnippet(rawText: string, options?: number | DiagnosticSnippetOptions): string {
+  // Backward compatibility: accept number as second argument
+  const opts: DiagnosticSnippetOptions = typeof options === 'number'
+    ? { snippetChars: options }
+    : options ?? {};
+
+  const snippetChars = opts.snippetChars ?? DEFAULT_DIAGNOSTIC_SNIPPET_CHARS;
+
+  // Bug #3 fix: Redact snippet to prevent leaking user content in telemetry
+  if (opts.redactSnippet) {
+    const placeholder = '[REDACTED - model output omitted from telemetry]';
+    if (rawText.length <= snippetChars * 2) {
+      return placeholder;
+    }
+    return `${placeholder} (${rawText.length} total chars)`;
+  }
+
   const head = rawText.slice(0, snippetChars);
   if (rawText.length <= snippetChars * 2) {
     return head;

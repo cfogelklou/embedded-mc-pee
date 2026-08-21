@@ -1026,11 +1026,12 @@ describe('Agent Harness Executor', () => {
 
       // Repair prompt structure: error preamble + bounded snippet of the
       // failed raw output + fix instruction.
+      // After bug #3 fix: snippet is redacted to prevent leaking user content in telemetry
       expect(transport.requests.length).toBe(2);
       const repairPrompt = transport.requests[1].promptText;
       expect(repairPrompt).toContain('Validation Error:');
       expect(repairPrompt).toContain('Previous response (bounded excerpt):');
-      expect(repairPrompt).toContain('This is not valid JSON at all');
+      expect(repairPrompt).toContain('[REDACTED - model output omitted from telemetry]');
       expect(repairPrompt).toContain('Please fix the error and return ONLY a valid JSON object');
     });
 
